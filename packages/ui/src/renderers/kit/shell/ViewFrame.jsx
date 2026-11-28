@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "@cad/ui/i18n";
 import { cn } from "@cad/ui/utils";
-import { PANEL_SHEET_LEFT_CLASS } from "../../../file-viewer/panelPeek.js";
+import { PANEL_SHEET_BOTTOM_CLASS } from "../../../file-viewer/panelPeek.js";
 import ViewerAlertCard from "../status/ViewerAlertCard.jsx";
 import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import { ViewPreviewLabel, ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
@@ -38,9 +38,10 @@ import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from ".
  *   navbar's (`file-viewer/panelToggles.js`), its first control: a collapsed panel leaves nothing over the model but
  *   while a mouse rests on that toggle, when it peeks over the view, pushing nothing (`usePanelPeek.js`), until the
  *   pointer has left both, Escape, a press on the model, or a click on the toggle (or ⌘\) pins it. On a
- *   phone the same toggle opens it as a sheet from the left (shadcn's Sheet) under the navbar, over the model with no scrim,
- *   sliding in and out as the peek does (100ms in, 80ms out: `panelPeek.js`'s `PANEL_SHEET_LEFT_CLASS`), starting
- *   closed each time: a tap outside it, a swipe back to the left or Escape put it away. Preview keeps the
+ *   phone the same toggle opens it as a sheet from the bottom (shadcn's Sheet), the lower 55% of the room under the navbar,
+ *   the model in sight above it (so a part hidden or shown from it is seen go), with no scrim, sliding up and down in
+ *   the peek's times (100ms in, 80ms out: `panelPeek.js`'s `PANEL_SHEET_BOTTOM_CLASS`), starting closed each time: a
+ *   tap outside it, a swipe down (or a tap) on its grip or Escape put it away. Preview keeps the
  *   docked panel mounted, out of sight, so a tree keeps its state.
  * - **The strip's column** at the top centre of the WHOLE view, always: no panel moves it, and where it meets one it
  *   stands over it (a layer of its own over the panels, `data-view-top-layer`); on a phone, the same. In it the strip (`tools`),
@@ -208,20 +209,31 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
     label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null} sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab}
     width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} /> : null;
   // A phone's: the same panel, its tabs, search and every tab's content, the same components at the same sizes (a tree
-  // row's own touch height aside), in a sheet from the left over the model (`FlatPanel`'s "page" mode), in the viewer's element.
-  // Under the navbar, with no scrim (`usePhoneSheetPlace`), sliding in and out from the left as the Display card does
+  // row's own touch height aside), in a sheet from the bottom over the lower part of the model (`FlatPanel`'s "page" mode), in
+  // the viewer's element. Its overlay from the navbar down, with no scrim (`usePhoneSheetPlace`), sliding up and down in the time the Display card does
   // from the right: the peek's one slide (`panelPeek.js`), so a phone's two popovers move alike.
   const closeSheet = useCallback(() => setSheetOpen(false), []);
-  const sheetPlace = usePhoneSheetPlace(viewerElement, has && mobile && sheetOpen && !previewing);
+  const sheetShown = has && mobile && sheetOpen && !previewing;
+  const sheetPlace = usePhoneSheetPlace(viewerElement, sheetShown);
+  // While the sheet is up the canvas ends at its top, as a pushed panel takes its width: the picture is drawn, and a fit
+  // centred, in what the sheet leaves, so the model stays whole above it.
+  const [sheetInset, setSheetInset] = useState(0);
+  useLayoutEffect(() => {
+    const stage = stageRef.current;
+    setSheetInset(sheetShown && stage && sheetPlace.sheetTop != null ? Math.max(0, Math.round(stage.getBoundingClientRect().bottom - sheetPlace.sheetTop)) : 0);
+  }, [sheetShown, sheetPlace.sheetTop]);
   const sheetNode = has && mobile ? <Sheet open={sheetOpen && !previewing} onOpenChange={setSheetOpen}>
-    <SheetContent side="left" showCloseButton={false} onSwipeClose={closeSheet} container={viewerElement?.current ?? undefined}
-      scrim={false} animated={false} style={sheetPlace.style} overlayStyle={sheetPlace.style} onCloseAutoFocus={sheetPlace.onCloseAutoFocus}
+    <SheetContent side="bottom" showCloseButton={false} container={viewerElement?.current ?? undefined}
+      scrim={false} animated={false} style={sheetPlace.sheetStyle} overlayStyle={sheetPlace.style} onCloseAutoFocus={sheetPlace.onCloseAutoFocus}
       onPointerDownOutside={sheetPlace.onPointerDownOutside}
-      aria-describedby={undefined} className={cn("h-auto w-[85%] max-w-[20rem] gap-0 overflow-hidden border-border p-0", PANEL_SHEET_LEFT_CLASS)} data-panel-sheet="">
+      aria-describedby={undefined} className={cn("gap-0 overflow-hidden rounded-t-xl border-border bg-sidebar p-0 shadow-md", PANEL_SHEET_BOTTOM_CLASS)} data-panel-sheet="">
       <SheetTitle className="sr-only">{panel.label}</SheetTitle>
-      <FlatPanel mode="page" open onClose={closeSheet} loading={panelLoading} label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null}
-        sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab} width={flat.width} maxWidth={flat.maxWidth}
-        onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} />
+      <SheetGrip onSwipeClose={closeSheet} />
+      <div className="relative min-h-0 flex-1">
+        <FlatPanel mode="page" open onClose={closeSheet} loading={panelLoading} label={panel.label} searchLabel={panel.searchLabel} tabs={panel.tabs ?? null}
+          sections={panel.sections ?? null} tab={flat.tab} onTabChange={flat.changeTab} width={flat.width} maxWidth={flat.maxWidth}
+          onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} />
+      </div>
     </SheetContent>
   </Sheet> : null;
   // The toggle, the navbar's (`file-viewer/panelToggles.js`), its first control. A collapsed panel leaves nothing over the model.
@@ -328,7 +340,8 @@ export default function ViewFrame({ rootRef = null, surface = null, className = 
           is visible and a change of its size reaches the picture as a plain resize. */}
       <div ref={stageRef} className="@container/cad-viewport pointer-events-none relative min-h-0 min-w-0 flex-1"
         data-cad-canvas={stageColor ?? ""} style={stageVariables}>
-        <div ref={canvasBoxRef} className={cn("pointer-events-auto absolute inset-0", scheme)} style={viewport?.canvas ? { "--canvas": viewport.canvas } : undefined} aria-busy={busy === undefined ? undefined : busy ? "true" : "false"}
+        <div ref={canvasBoxRef} className={cn("pointer-events-auto absolute inset-0", scheme)}
+          style={viewport?.canvas || sheetInset ? { ...(viewport?.canvas ? { "--canvas": viewport.canvas } : {}), ...(sheetInset ? { bottom: sheetInset } : {}) } : undefined} aria-busy={busy === undefined ? undefined : busy ? "true" : "false"}
           data-cad-canvas-box="" {...hoverTip.handlers}>
           {children}
           <HoverTip tip={hoverTip.tip} />
@@ -402,3 +415,27 @@ const QUICK_EDIT_MAX_PX = 400;
 const QUICK_EDIT_MARGIN_PX = 16;
 // Nothing to say: the status draws nothing.
 const IDLE_STATUS = Object.freeze({ pending: false });
+
+// A swipe down this far on the grip, more down than across, puts the phone's sheet away.
+const GRIP_SWIPE_PX = 48;
+
+/**
+ * The grip at the top of a phone's sidebar sheet: a short bar that says the sheet comes from the bottom, and the one
+ * place a swipe down closes it (the tree under it scrolls with the same finger, so the sheet as a whole takes no
+ * swipe). A tap on it closes it too.
+ */
+function SheetGrip({ onSwipeClose }) {
+  const start = useRef(null);
+  return <div aria-hidden="true" data-panel-sheet-grip="" className="flex h-4 shrink-0 touch-none items-center justify-center"
+    onPointerDown={event => { start.current = { x: event.clientX, y: event.clientY, id: event.pointerId }; }}
+    onPointerUp={event => {
+      const from = start.current;
+      start.current = null;
+      if (!from || from.id !== event.pointerId) return;
+      const dx = event.clientX - from.x, dy = event.clientY - from.y;
+      if ((dy >= GRIP_SWIPE_PX && dy > Math.abs(dx)) || Math.hypot(dx, dy) < 8) onSwipeClose();
+    }}
+    onPointerCancel={() => { start.current = null; }}>
+    <span className="h-1 w-9 rounded-full bg-muted-foreground/30" />
+  </div>;
+}

@@ -77,6 +77,8 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   'menu_hide', 'menu_reveal', 'menu_expand', 'menu_collapse', 'menu_expand_all', 'menu_collapse_all', 'menu_zoom_fit',
   'menu_zoom_selection',
   'menu_select_tangent_faces', 'menu_select_tangent_edges',
+  // Select's bar over picked parts, and the row of what is hidden or isolated under the strip.
+  'selection_bar_isolate', 'selection_bar_hide', 'selection_bar_zoom', 'selection_bar_more', 'hidden_undo', 'hidden_show_all', 'hidden_exit_isolate',
   // The view itself: a double-click's Look at and isolate, the view cube, F's fit.
   'look_at', 'isolate', 'view_cube', 'view_cube_drag', 'fit',
   // Quick Edit's Copy, Queue and Send.

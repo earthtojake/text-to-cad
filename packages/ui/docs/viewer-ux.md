@@ -249,11 +249,14 @@ The bar where a person writes a note to their agent about what is on screen (`Qu
   ([Two scales](design-system.md#two-scales)); what changes in the layout is below.
 - **The page is pinned** (`fixed inset-0`) and never scrolls.
 - **The navbar** is 48px, with no Back or Forward (no room). Display and Preview stay in it, without tooltips.
-- **The panel is a sheet** from the left, under the navbar and over the strip, the model and Quick Edit: 85% of the
-  width, at most 20rem, with no scrim. It slides in over 100ms and out over 80ms, starts closed, is never kept open,
-  and has no grip and no peek. Inside are the same tabs, search and rows, with row actions always shown.
-  - It closes on a tap outside it (a tap on the picture only closes it), a swipe left of at least 48px, Escape, the
-    toggle or ⌘\. A tap on Display, Preview or the file's name closes it and does that control's job in the same tap.
+- **The panel is a sheet** from the bottom, the view's full width and the lower 55% of the room under the navbar, over
+  Quick Edit and the lower part of the model, with no scrim. It slides up over 100ms and down over 80ms, starts closed,
+  is never kept open, and has no peek. A grip tops it. Inside are the same tabs, search and rows, with row actions
+  always shown. Why from the bottom: the model stays in sight above it, so a part hidden or shown from a row is seen
+  going or coming; a sheet from the left covered 85% of the view.
+  - It closes on a tap outside it (a tap on the picture only closes it), a swipe down of at least 48px on its grip (or
+    a tap on it), Escape, the toggle or ⌘\. The rows take no swipe: they scroll. A tap on Display, Preview or the
+    file's name closes it and does that control's job in the same tap.
   - A press on a row of a board's or schematic's tree closes it and frames what was chosen.
   - The focus goes into it as it opens and back to the toggle as it closes.
 - **The strip** is one row of 36px tiles that never wraps. Tools that do not fit go, from the end, into More (an
@@ -519,7 +522,17 @@ a schematic. On a STEP or .xbf, Measure carries one too.
 - **One tool in hand,** and only it lit (the pressed fill, its glyph in brand blue, no tooltip). Pressing it again
   does nothing. A tool goes down when another is taken up, or with Escape, which goes back to Select.
 - **Select** is every file's default, and every open starts in it: the tool in hand is never kept. A pick in a panel
-  tree takes Select up before it acts. Select has no row under the strip.
+  tree takes Select up before it acts. Select's row under the strip is there only while something is hidden or
+  isolated (on a STEP or .xbf): an eye crossed out and the count ("2 hidden"), Undo while the last hide can be undone
+  (the parts come back, picked again), and Show all; then Exit isolate (Exit all isolates for several). Why: a part
+  hidden from the bar over it, or from a phone's sheet, comes back without the panel.
+- **The bar over a pick.** On a STEP or .xbf assembly, the parts Select has picked get a small bar just above them
+  (below where there is no room above), following them as the camera or an Explode moves them, kept clear of the strip
+  and of Quick Edit, and gone while they are off the view: Isolate (pressed while they are isolated: a press then leaves
+  isolation), Hide, Zoom to selection, a rule, and More, the view's menu for the same pick. Isolate from the bar keeps
+  the pick, so the bar stays. Why: the actions a person takes on a part there and then, at the part, rather than in a
+  menu they must know to long-press for or in a panel that covers the model on a phone. As the bar over picked ink
+  ([Draw](#draw)) is for ink.
 - **Measure** is the ruler.
   - On a STEP or .xbf it takes whole things, as its filter allows: a vertex within 10px of an edge's end, else the
     edge, else the face; with nothing ticked, or Shift held, a free point. A hover lights what a press would take. A

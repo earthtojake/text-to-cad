@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { EyeOff, Focus, ZoomIn } from "lucide-react";
 import { viewFeaturesForKind } from "@cad/core/common/viewSettings.js";
 import { sceneFramingBounds } from "@cad/core/lib/viewer/sceneContract.js";
 import { boundsInUnits } from "@cad/core/lib/viewer/sceneUnits.js";
@@ -21,6 +22,8 @@ import MeasureFilterMenu, { measureBadge } from "../kit/tools/measure/MeasureFil
 import { MEASURE_FILTER_DEFAULT } from "../kit/tools/measure/measureFilter.js";
 import JointHandleOverlay from "../kit/tools/pose/JointHandleOverlay.jsx";
 import { selects } from "../kit/tools/select/selectFilter.js";
+import SelectionActionBar from "../kit/tools/select/SelectionActionBar.jsx";
+import VisibilityRow from "../kit/tools/select/VisibilityRow.jsx";
 import { TOOL_SHORTCUTS } from "../kit/tools/toolShortcuts.js";
 import { usePointerPick } from "../kit/tools/select/usePointerPick.js";
 import { prefersCoarsePointer } from "../kit/viewport/dom.js";
@@ -34,7 +37,7 @@ import XbfParametersSection, { useXbfParameters } from "./XbfParametersSection.j
 import { MeasureIcon, SelectIcon, SelectMenu, XBF_SELECT_DEFAULT, xbfSelectBadge } from "./XbfSelectionModes.jsx";
 import { useXbfElementFacts, useXbfSelectionChips, xbfCopyText, xbfDescriber, xbfNodeRefs, xbfTipper } from "./xbfChips.jsx";
 import { xbfJointHandles } from "./xbfJointHandles.js";
-import { viewportMenuEntries } from "./xbfMenuItems.js";
+import { assemblyPartMenuEntries, viewportMenuEntries } from "./xbfMenuItems.js";
 import { xbfModelMenu, xbfPartMenu, xbfTangentSources, xbfTopologyMenu } from "./xbfMenus.js";
 import { nextSelectionIds, tangentChain, withTangentChains, xbfGeometryPicks } from "./xbfSelectionFilter.js";
 import { isXbfAssemblyId, presentXbfTree, xbfAssemblyIds, xbfCoveringIds, xbfPickFrontier } from "./xbfTree.js";
@@ -180,6 +183,10 @@ function XbfSurface({ view, data }) {
   const [expansion, setExpansion] = useState(NO_EXPANSION);
   const expandedIds = expansion.open;
   const [hiddenIds, setHiddenIds] = useState(EMPTY);
+  const hiddenIdsRef = useRef(hiddenIds);
+  hiddenIdsRef.current = hiddenIds;
+  // The last hide, so it can be undone from the row under the strip: the parts it hid, and the selection it let go of.
+  const [lastHide, setLastHide] = useState(/** @type {{ leaves: string[], chosen: string[] } | null} */ (null));
   const [isolatedIds, setIsolatedIds] = useState(EMPTY);
   const isolatedIdsRef = useRef(isolatedIds);
   isolatedIdsRef.current = isolatedIds;
@@ -442,6 +449,9 @@ function XbfSurface({ view, data }) {
   }, [tree]);
   const hideNodes = useCallback((ids) => {
     const leaves = new Set(leavesOf(ids));
+    const before = new Set(hiddenIdsRef.current);
+    const newly = [...leaves].filter(id => !before.has(id));
+    setLastHide(newly.length ? { leaves: newly, chosen: selectedRef.current } : null);
     for (const id of ids) collapseSubtree(id);
     // What is hidden is let go of: a face or edge of a hidden part, a node all of whose parts are.
     const gone = item => (isElementId(item) ? leaves.has(item.split("/")[0])
@@ -459,6 +469,15 @@ function XbfSurface({ view, data }) {
     if (leaves.length && leaves.every(leaf => hiddenIds.includes(leaf))) revealNodes([id]); else hideNodes([id]);
   }, [tree, hiddenIds, hideNodes, revealNodes]);
   const showAll = useCallback(() => setHiddenIds(EMPTY), []);
+  // Undo the last hide while what it hid is still hidden: those parts come back, and the selection it let go of.
+  const undoable = Boolean(lastHide?.leaves.every(id => hiddenIds.includes(id)));
+  const undoHide = useCallback(() => {
+    if (!lastHide) return;
+    const back = new Set(lastHide.leaves);
+    setHiddenIds(now => now.filter(id => !back.has(id)));
+    setChosen(lastHide.chosen);
+    setLastHide(null);
+  }, [lastHide]);
   const hideOthers = useCallback((ids) => {
     const keep = new Set(leavesOf(ids));
     setIsolatedIds(EMPTY);
@@ -798,7 +817,30 @@ function XbfSurface({ view, data }) {
   const tip = useMemo(() => xbfTipper({ scene, tree }), [scene, tree]);
   const inspect = useMemo(() => (scene && !previewing ? { describe, tip, hovered: pointed, data: "model" } : null), [scene, previewing, describe, tip, pointed]);
 
-  return <RendererShell shell={shell} tools={strip} subToolbar={effects.subToolbar ?? (measuring ? <MeasurementsBar measure={measure} /> : null)} sidebar={sidebar} previewView={previewView}
+  // Under Select, what is hidden or isolated and its way back, under the strip (`VisibilityRow.jsx`).
+  const visibilityRow = selectActive ? <VisibilityRow hiddenCount={hiddenIds.length} disabled={shell.idle}
+    onShowAll={() => { usage.used("hidden_show_all"); showAll(); }} onUndo={undoable ? () => { usage.used("hidden_undo"); undoHide(); } : null}
+    isolatedCount={assembly ? isolatedIds.length : 0} onExitIsolate={() => { usage.used("hidden_exit_isolate"); exitIsolate(); }} /> : null;
+  // The bar over the parts Select has picked in an assembly (`SelectionActionBar.jsx`): Isolate, Hide, Zoom to selection,
+  // then More, the part menu's every entry for the same pick.
+  const barShown = selectActive && assembly && selectedNodeIds.length > 0 && !shell.idle;
+  const barIsolated = barShown && selectedNodeIds.every(id => isolatedIds.includes(id));
+  const barActions = barShown ? [
+    { id: "isolate", label: t(barIsolated ? "tree.exitIsolate" : "tree.isolate"), active: barIsolated, icon: <Focus className="size-3" strokeWidth={2} aria-hidden="true" />,
+      onSelect: () => {
+        usage.used("selection_bar_isolate");
+        if (barIsolated) { if (selectedNodeIds.length >= isolatedIds.length) exitIsolate(); else selectedNodeIds.forEach(exitSingleIsolate); return; }
+        isolate(selectedNodeIds, { keepSelection: true });
+      } },
+    { id: "hide", label: t("tree.hide"), icon: <EyeOff className="size-3" strokeWidth={2} aria-hidden="true" />,
+      onSelect: () => { usage.used("selection_bar_hide"); hideNodes(selectedNodeIds); } },
+    { id: "zoom-selection", label: t("menu.zoomToSelection"), icon: <ZoomIn className="size-3" strokeWidth={2} aria-hidden="true" />,
+      onSelect: () => { usage.used("selection_bar_zoom"); zoomToSelection(); } }
+  ] : null;
+  const barMenu = () => assemblyPartMenuEntries(menuForNode(selectedNodeIds[0]), { actions: partMenuActions, t });
+  const barBounds = () => scene?.selectionBounds(leavesOf(selectedNodeIds)) || null;
+
+  return <RendererShell shell={shell} tools={strip} subToolbar={effects.subToolbar ?? (measuring ? <MeasurementsBar measure={measure} /> : visibilityRow)} sidebar={sidebar} previewView={previewView}
     fileSections={fileSections} jointsHoldMotion={Boolean(fileSections) && sections.includes("position")}
     inspect={inspect} promptNotes={parameters.notes}
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameReference}
@@ -816,6 +858,9 @@ function XbfSurface({ view, data }) {
         <XbfMeasureOverlay viewport={viewport} scene={scene} measure={measure} picking={measuring} preview={shell.previewing}
           filter={measureFilter} source={source} fetch={engineFetch} onHoverElement={hoverElement} onDoublePick={handleMeasureDoublePick} />
         {handles ? <JointHandleOverlay handles={handles} layoutSeamRef={handleLayoutRef} {...viewport} /> : null}
+        {barActions ? <SelectionActionBar runtimeRef={viewport.runtimeRef} viewerReadyTick={viewport.viewerReadyTick} bounds={barBounds}
+          boundsKey={`${selectedNodeIds.join(",")}:${loaded.revision}`} label={t("selection.actions")} moreLabel={t("selection.more")}
+          actions={barActions} menu={barMenu} onMenuOpen={() => usage.used("selection_bar_more")} /> : null}
         <XbfPick viewport={viewport} scene={picker} enabled={picking} onPick={handlePick} takesAway={pickTakesAway} onHover={handleHover} onDoublePick={handleDoublePick}
           deferRef={deferPickRef} pointerTypeRef={pointerTypeRef} />
       </>;

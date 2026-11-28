@@ -52,10 +52,10 @@ export const PANEL_PEEK_OUT_LEFT_CLASS = `${PANEL_PEEK_OUT_CLASS} slide-out-to-l
 /** A card docked at the view's right edge, the peek's mirror (`kit/view-settings/SettingsCard.jsx`), from the right. */
 export const PANEL_PEEK_IN_RIGHT_CLASS = `${PANEL_PEEK_IN_CLASS} slide-in-from-right`;
 export const PANEL_PEEK_OUT_RIGHT_CLASS = `${PANEL_PEEK_OUT_CLASS} slide-out-to-right`;
-/** The same slide for a sheet that opens and closes by its `data-state` (a phone's sidebar, from the left): written out
- * whole so the stylesheet sees it; `panelPeek.test.js` holds its durations to the peek's. */
-export const PANEL_SHEET_LEFT_CLASS = "data-[state=open]:animate-in data-[state=open]:slide-in-from-left data-[state=open]:duration-100 "
-  + "data-[state=open]:ease-out data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left data-[state=closed]:duration-80 "
+/** The same times for a sheet that opens and closes by its `data-state` (a phone's sidebar, `kit/shell/ViewFrame.jsx`), up from the
+ * view's foot: written out whole so the stylesheet sees it; `panelPeek.test.js` holds its durations to the peek's. */
+export const PANEL_SHEET_BOTTOM_CLASS = "data-[state=open]:animate-in data-[state=open]:slide-in-from-bottom data-[state=open]:duration-100 "
+  + "data-[state=open]:ease-out data-[state=closed]:animate-out data-[state=closed]:slide-out-to-bottom data-[state=closed]:duration-80 "
   + "data-[state=closed]:ease-in data-[state=closed]:fill-mode-forwards motion-reduce:animate-none";
 
 /** A peeking panel's elevation over the view: the floating chrome's shadow (`lib/floatingSurface.js`'s `shadow-md`). */

@@ -487,25 +487,29 @@ for (const [what, file, route, groups] of [['a 3D view', 'panel.harness', undefi
     const phone = await measure();
     assert.ok(Math.abs(phone.strip - phone.view) <= 1, `on a phone the strip is at the view's centre: ${phone.strip} of ${phone.view}`);
     assert.equal(await pane.locator('[data-flat-panel], [data-zoom-pill], [data-view-cube]').count(), 0, 'a phone has no docked panel, pill or cube');
-    // Its panel is a sheet from the left under the navbar, over the model with no scrim and no slide, opened by the
-    // navbar's toggle; a tap outside shuts it, at once, and focus goes back to the toggle.
+    // Its panel is a sheet from the bottom, the lower 55% of the room under the navbar, the model in sight above it, with
+    // no scrim, opened by the navbar's toggle; a tap outside shuts it, at once, and focus goes back to the toggle.
     await pane.locator('[data-navbar-panel="left"]').click();
     const sheet = page.locator('[data-panel-sheet]');
     await sheet.waitFor();
-    // It slides in (the peek's slide, `PANEL_SHEET_LEFT_CLASS`): read where it rests once its slide has played.
+    // It slides up (the peek's time, `PANEL_SHEET_BOTTOM_CLASS`): read where it rests once its slide has played.
     const slide = await page.evaluate(() => getComputedStyle(document.querySelector('[data-panel-sheet]')).animationDuration);
     await page.evaluate(() => Promise.all(document.querySelector('[data-panel-sheet]').getAnimations().map(animation => animation.finished.catch(() => {}))));
     const placed = await page.evaluate(() => {
       const box = document.querySelector('[data-panel-sheet]').getBoundingClientRect();
       const overlay = document.querySelector('[data-slot="sheet-overlay"]');
-      const style = getComputedStyle(document.querySelector('[data-panel-sheet]'));
-      return { left: Math.round(box.left), top: Math.round(box.top), navbar: Math.round(document.querySelector('[data-testid="one"] [data-viewer-navbar]').getBoundingClientRect().bottom),
-        scrim: overlay ? getComputedStyle(overlay).backgroundColor : null, focused: document.activeElement?.closest('[data-panel-sheet]') !== null };
+      const navbar = document.querySelector('[data-testid="one"] [data-viewer-navbar]').getBoundingClientRect().bottom;
+      return { left: Math.round(box.left), bottom: Math.round(box.bottom), share: Math.round(100 * (box.bottom - box.top) / (window.innerHeight - navbar)),
+        overlayTop: Math.round(overlay.getBoundingClientRect().top), navbar: Math.round(navbar), window: window.innerHeight,
+        scrim: overlay ? getComputedStyle(overlay).backgroundColor : null, focused: document.activeElement?.closest('[data-panel-sheet]') !== null,
+        grip: document.querySelector('[data-panel-sheet] [data-panel-sheet-grip]') !== null };
     });
-    assert.deepEqual({ ...placed, slide }, { left: 0, top: placed.navbar, navbar: placed.navbar, scrim: 'rgba(0, 0, 0, 0)', focused: true, slide: '0.1s' },
-      `slid in to the left edge in 100ms, its top the navbar's bottom, nothing dimmed, focus in it: ${JSON.stringify(placed)}`);
+    assert.deepEqual({ ...placed, slide }, { left: 0, bottom: placed.window, share: 55, overlayTop: placed.navbar, navbar: placed.navbar, window: placed.window,
+      scrim: 'rgba(0, 0, 0, 0)', focused: true, grip: true, slide: '0.1s' },
+      `slid up in 100ms to the view's foot, the lower 55% under the navbar, its overlay from the navbar, nothing dimmed, focus in it: ${JSON.stringify(placed)}`);
     assert.equal(await sheet.locator('[data-flat-panel]').getAttribute('data-flat-panel'), 'page');
-    await page.mouse.click(380, 300);
+    // A tap on the model above it.
+    await page.mouse.click(380, Math.round((await sheet.boundingBox()).y) - 40);
     await sheet.waitFor({ state: 'detached' });
     assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-navbar-panel')), 'left', 'focus back on the toggle');
     // The navbar's toggle, in sight above it, shuts it too.
