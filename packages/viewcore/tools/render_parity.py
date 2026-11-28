@@ -693,6 +693,249 @@ def preview(args: argparse.Namespace) -> int:
     return 0 if worst_mean <= 1.5 and worst_moved <= 0.5 else 1
 
 
+# --- the ink ---------------------------------------------------------------------------------------------------
+
+
+def ink_of(scene, annotation: dict, payloads: Payloads) -> tuple[list[dict], list[dict]]:
+    """What ``Scene.annotate`` handed OCCT, as the core's draws in the ``top`` layer: each stroke drawn as a ribbon
+    (its triangles, read back off the shape shown), a thin one as a polyline, and each text mark's quad with its
+    words' picture (``text.text_canvas``) mapped as ``_text_quad`` maps it. The strokes, and the text quads apart."""
+    from cad.engine.render.text import text_canvas
+    from OCP.BRep import BRep_Tool
+    from OCP.BRepTools import BRepTools_WireExplorer
+    from OCP.Quantity import Quantity_Color
+    from OCP.TopAbs import TopAbs_FACE, TopAbs_WIRE
+    from OCP.TopExp import TopExp, TopExp_Explorer
+    from OCP.TopLoc import TopLoc_Location
+    from OCP.TopoDS import TopoDS
+
+    strokes = []
+    for shown in scene.overlays:
+        shape = shown.Shape()
+        colour = Quantity_Color()
+        shown.Color(colour)
+        rgba = [colour.Red(), colour.Green(), colour.Blue(), 1.0]
+        positions, indices = [], []
+        faces = TopExp_Explorer(shape, TopAbs_FACE)
+        while faces.More():
+            location = TopLoc_Location()
+            mesh = BRep_Tool.Triangulation_s(TopoDS.Face(faces.Current()), location)
+            base = len(positions)
+            positions += [(mesh.Node(i).X(), mesh.Node(i).Y(), mesh.Node(i).Z()) for i in range(1, mesh.NbNodes() + 1)]
+            indices += [[base + v - 1 for v in mesh.Triangle(i).Get()] for i in range(1, mesh.NbTriangles() + 1)]
+            faces.Next()
+        if indices:  # a ribbon: unlit, opaque, OCCT's default polygon offset
+            strokes.append({"triangles": {"positions": payloads.add(np.asarray(positions, np.float32).tobytes()),
+                                          "indices": payloads.add(np.asarray(indices, np.uint32).tobytes())},
+                            "color": rgba, "blend": False, "offset": [1.0, 1.0], "layer": "top"})
+            continue
+        wires = TopExp_Explorer(shape, TopAbs_WIRE)
+        while wires.More():
+            points, walk, last = [], BRepTools_WireExplorer(TopoDS.Wire(wires.Current())), None
+            while walk.More():  # each edge's first point in the wire's order, then the last edge's other end
+                p = BRep_Tool.Pnt_s(walk.CurrentVertex())
+                points.append((p.X(), p.Y(), p.Z()))
+                ends = (TopExp.FirstVertex_s(walk.Current()), TopExp.LastVertex_s(walk.Current()))
+                last = ends[1] if ends[0].IsSame(walk.CurrentVertex()) else ends[0]
+                walk.Next()
+            if last is not None:
+                p = BRep_Tool.Pnt_s(last)
+                points.append((p.X(), p.Y(), p.Z()))
+            strokes.append({"lines": {"positions": payloads.add(np.asarray(points, np.float32).tobytes()),
+                                      "counts": payloads.add(np.asarray([len(points)], np.uint32).tobytes())},
+                            "color": rgba[:3], "width": float(shown.Width()), "layer": "top"})
+            wires.Next()
+    words = []
+    texts = [mark for mark in annotation.get("marks", []) if mark["kind"] not in ("stroke", "area")
+             and len(mark["points"]) == 12]
+    for (corners, _colour), mark in zip(scene.text_quads, texts):
+        picture = text_canvas(mark.get("text", ""), float(mark.get("fontPx", 14)), mark["color"])
+        texels = np.array([(0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0)], np.float32)
+        words.append({"triangles": {"positions": payloads.add(np.asarray(corners, np.float32).tobytes()),
+                                    "texels": payloads.add(texels.tobytes()),
+                                    "indices": payloads.add(np.array([[0, 1, 2], [0, 2, 3]], np.uint32).tobytes())},
+                      "texture": {"payload": payloads.add(np.ascontiguousarray(picture).tobytes()),
+                                  "width": picture.shape[1], "height": picture.shape[0]},
+                      "color": [1.0, 1.0, 1.0, 1.0], "blend": True, "offset": [1.0, 1.0], "layer": "top"})
+    return strokes, words
+
+
+class InkCanvas:
+    """``Scene.canvas`` for the core where the ink is drawn: a frame is the model, the strokes and the text quads
+    shown; a tile (``_relay_text``'s) is the frame drawn whole and cut out."""
+
+    def __init__(self, scene, core, annotation: dict) -> None:
+        self.scene, self.core, self.annotation = scene, core, annotation
+        self.width, self.height = scene.canvas.width, scene.canvas.height
+        self.words_shown = True
+        self.seconds = 0.0
+        canvas = self
+
+        class Shown:  # the text quads' structures: shown or put away
+            def Erase(self):
+                canvas.words_shown = False
+
+            def Display(self):
+                canvas.words_shown = True
+
+        scene.structures = [Shown()]
+
+    def frame(self) -> np.ndarray:
+        payloads = Payloads()
+        found, _ = scene_of(self.scene, payloads=payloads)
+        strokes, words = ink_of(self.scene, self.annotation, payloads)
+        found["draw"] += strokes + (words if self.words_shown else [])
+        found["samples"] = 4
+        found["payloads"] = [len(payloads.data[name]) for name in payloads.names]
+        data, seconds = self.core.render(found, b"".join(payloads.data[name] for name in payloads.names))
+        self.seconds += seconds
+        return np.frombuffer(data, np.uint8).reshape(self.height, self.width, 4)[..., :3].copy()
+
+    def tile(self, left: int, top: int, width: int, height: int) -> np.ndarray:
+        return self.frame()[top:top + height, left:left + width]
+
+
+def ink(args: argparse.Namespace) -> int:
+    """Today's still of a file with an annotation drawn over it (``Scene.annotate``; with ``--relay`` the words laid
+    again by ``painter``) and the core's, by cad's own code with the canvas swapped: ``<model>/ink.occt.png``,
+    ``.<core>.png``."""
+    from cad.engine.render.occt import Scene
+    from PIL import Image
+
+    out = Path(args.out)
+    core = Native(args.native) if args.native else Node(args.node, Path(args.wasm))
+    annotation = json.loads(Path(args.annotation).read_text())
+    path = Path(args.file)
+    structure, buffers, parts, _texels = read_file(path)
+    folder = out / path.stem
+    folder.mkdir(parents=True, exist_ok=True)
+    scene = Scene(path, buffers, size=SIZE, structure=structure, parts=parts)
+    scene.show({"mode": args.mode})
+    scene.frame(args.camera, args.projection)
+    scene.annotate(annotation)
+    clock = time.perf_counter()
+    want = scene.canvas.frame()
+    today = time.perf_counter() - clock
+    if args.relay:  # the words laid again over the frame as three lays them (``_relay_text``: a camera tile each)
+        scene.painter()(want)
+    Image.fromarray(want).save(folder / "ink.occt.png")
+    occt_canvas = scene.canvas
+    scene.canvas = InkCanvas(scene, core, annotation)
+    got = scene.canvas.frame()
+    if args.relay:
+        scene.painter()(got)
+    Image.fromarray(got).save(folder / f"ink.{core.name}.png")
+    numbers = measure(want, got)
+    print(f"{path.stem:28} ink      mean {numbers['mean']!s:22} >8 {numbers['over8']:6.2f}%  >32 "
+          f"{numbers['over32']:6.2f}%  moved>32 {numbers['moved32']:6.2f}%  OpenGL {today*1000:6.1f} ms  "
+          f"{core.name} {scene.canvas.seconds*1000:6.1f} ms", flush=True)
+    sheet([("ink", want, got, numbers)], out / f"{path.stem}.ink.{core.name}.png")
+    occt_canvas.close()
+    core.close()
+    return 0 if max(numbers["mean"]) <= 1.5 and numbers["moved32"] <= 0.5 else 1
+
+
+# --- a drawing ---------------------------------------------------------------------------------------------------
+
+
+def drawing_scene_of(held, width: int, height: int, payloads: Payloads) -> dict:
+    """What ``drawing.Held`` hands OCCT for the whole drawing fitted (``Held._show`` and ``draw``), as the core's
+    scene: each pen's fills (unlit triangles a hair under the sheet) under its lines (polylines a pixel wide), on the
+    paper, one sample a pixel, seen from above. The words are painted over the frame in Python, as today."""
+    from cad.engine.render import finish
+    from cad.engine.render.look import DRAWING
+
+    drawing = held.drawing
+    bounds = drawing.bounds or (0.0, 0.0, 1.0, 1.0)
+    span_x, span_y = abs(bounds[2] - bounds[0]), abs(bounds[3] - bounds[1])
+    usable_x, usable_y = max(width - 2 * DRAWING.margin, width * 0.5), max(height - 2 * DRAWING.margin, height * 0.5)
+    scale = min(usable_x / span_x if span_x > 0 else np.inf, usable_y / span_y if span_y > 0 else np.inf)
+    scale = scale if np.isfinite(scale) and scale > 0 else 1.0
+    centre = ((bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2)
+    reach = max(span_x, span_y, 1.0)
+    depth = max(bounds[2] - bounds[0], bounds[3] - bounds[1], 1e-9) * 1e-4 if drawing.bounds else 1.0
+    draw = []
+    fills: dict = {}
+    for triangles, pen in drawing.fills:
+        fills.setdefault(pen, []).append(triangles)
+    for pen, chunks in fills.items():
+        corners = np.concatenate(chunks).reshape(-1, 2)
+        nodes = np.column_stack([corners, np.full(len(corners), -depth)]).astype(np.float32)
+        draw.append({"triangles": {"positions": payloads.add(nodes.tobytes()),
+                                   "indices": payloads.add(np.arange(len(nodes), dtype=np.uint32).tobytes())},
+                     "color": [*finish.linear(pen or DRAWING.ink), 1.0], "blend": False, "offset": [1.0, 1.0]})
+    pens: dict = {}
+    for points, pen in drawing.lines:
+        pens.setdefault(pen, []).append(points)
+    for pen, chunks in pens.items():
+        counts = np.array([len(chunk) for chunk in chunks], np.uint32)
+        points = np.column_stack([np.concatenate(chunks), np.zeros(int(counts.sum()))]).astype(np.float32)
+        draw.append({"lines": {"positions": payloads.add(points.tobytes()), "counts": payloads.add(counts.tobytes())},
+                     "color": list(finish.linear(pen or DRAWING.ink)), "width": DRAWING.line_width})
+    return {"width": width, "height": height, "samples": 1, "background": list(finish.linear(DRAWING.paper)),
+            "camera": {"projection": "orthographic", "eye": [centre[0], centre[1], reach],
+                       "target": [centre[0], centre[1], 0.0], "up": [0.0, 1.0, 0.0], "height": height / scale},
+            "draw": draw}
+
+
+def drawing(args: argparse.Namespace) -> int:
+    """A DXF drawn whole as ``drawing.Held.draw`` draws it, by OCCT and by the core (lines and fills; the words are
+    painted over both in Python alike, so neither has them): ``<name>/drawing.occt.png``, ``.<core>.png``."""
+    from cad.engine.render.context import Canvas
+    from cad.engine.render.drawing import Held
+    from cad.engine.render.look import DRAWING
+    from cad.engine.render.occt import _color, occt_scale
+    from OCP.gp import gp_Dir, gp_Pnt
+    from OCP.Graphic3d import Graphic3d_Camera
+    from PIL import Image
+
+    path = Path(args.file)
+    width, height = SIZE
+    held = Held(path)
+    held.open()
+    held.canvas = Canvas(width, height)
+    held.canvas.view.ChangeRenderingParams().NbMsaaSamples = 0
+    held._show()
+    for shown, pen in held.shown:
+        shown.SetColor(_color(pen or DRAWING.ink))
+        shown.SetWidth(DRAWING.line_width)
+    held.canvas.view.SetBackgroundColor(_color(DRAWING.paper))
+    payloads = Payloads()
+    found = drawing_scene_of(held, width, height, payloads)
+    camera = held.canvas.view.Camera()
+    camera.SetProjectionType(Graphic3d_Camera.Projection_e.Projection_Orthographic)
+    camera.SetAspect(width / height)
+    eye, target = found["camera"]["eye"], found["camera"]["target"]
+    camera.SetEyeAndCenter(gp_Pnt(*eye), gp_Pnt(*target))
+    camera.SetUp(gp_Dir(0, 1, 0))
+    camera.SetScale(occt_scale(found["camera"]["height"], width / height))
+    held.canvas.view.ZFitAll(1.0)
+    held.canvas.frame()
+    clock = time.perf_counter()
+    want = held.canvas.frame()
+    today = time.perf_counter() - clock
+    core = Native(args.native) if args.native else Node(args.node, Path(args.wasm))
+    found["payloads"] = [len(payloads.data[name]) for name in payloads.names]
+    blob = b"".join(payloads.data[name] for name in payloads.names)
+    best = None
+    for _ in range(args.times):
+        data, seconds = core.render(found, blob)
+        best = seconds if best is None else min(best, seconds)
+    got = np.frombuffer(data, np.uint8).reshape(height, width, 4)[..., :3]
+    folder = Path(args.out) / path.stem
+    folder.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(want).save(folder / "drawing.occt.png")
+    Image.fromarray(got).save(folder / f"drawing.{core.name}.png")
+    numbers = measure(want, got)
+    print(f"{path.stem:28} drawing  mean {numbers['mean']!s:22} >8 {numbers['over8']:6.2f}%  >32 "
+          f"{numbers['over32']:6.2f}%  moved>32 {numbers['moved32']:6.2f}%  OpenGL {today*1000:6.1f} ms  "
+          f"{core.name} {best*1000:6.1f} ms", flush=True)
+    sheet([("drawing", want, got, numbers)], Path(args.out) / f"{path.stem}.drawing.{core.name}.png")
+    held.close()
+    core.close()
+    return 0 if max(numbers["mean"]) <= 1.5 and numbers["moved32"] <= 0.5 else 1
+
+
 # --- the core's pictures ---------------------------------------------------------------------------------------
 
 
@@ -932,8 +1175,27 @@ def main(argv: list[str] | None = None) -> int:
     studio.add_argument("--times", type=int, default=2)
     studio.add_argument("--json")
     studio.add_argument("files", nargs="+")
+    marked = commands.add_parser("ink")
+    marked.add_argument("--out", required=True)
+    marked.add_argument("--native")
+    marked.add_argument("--node", default="node")
+    marked.add_argument("--wasm", default=str(HERE / "dist/viewcore.wasm"))
+    marked.add_argument("--annotation", required=True, help="the snapshot job's annotation (JSON)")
+    marked.add_argument("--mode", default="solid")
+    marked.add_argument("--camera", default="iso")
+    marked.add_argument("--projection", default="orthographic")
+    marked.add_argument("--relay", action="store_true", help="lay the words again as painter does (Canvas.tile)")
+    marked.add_argument("file")
+    sheet_of = commands.add_parser("drawing")
+    sheet_of.add_argument("--out", required=True)
+    sheet_of.add_argument("--native")
+    sheet_of.add_argument("--node", default="node")
+    sheet_of.add_argument("--wasm", default=str(HERE / "dist/viewcore.wasm"))
+    sheet_of.add_argument("--times", type=int, default=2)
+    sheet_of.add_argument("file")
     args = parser.parse_args(argv)
-    return {"reference": reference, "compare": compare, "preview": preview}[args.command](args)
+    return {"reference": reference, "compare": compare, "preview": preview, "ink": ink,
+            "drawing": drawing}[args.command](args)
 
 
 if __name__ == "__main__":

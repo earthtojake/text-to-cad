@@ -188,4 +188,9 @@ the backdrop picture; a depth is a `"depth"` frame through the 8-bit picture OCC
 does there and the core is told: the background picture shows its last row all the way down; a square depth
 picture is drawn with the view's own aspect.
 
+`render_parity.py ink` holds an annotation's ink (`Scene.annotate`: a stroke's ribbon read back off the shape
+shown, a thin one as a polyline, a text mark's quad with its words' picture) in the `top` layer against today's, and
+`render_parity.py drawing` a DXF drawn whole (`drawing.Held`: each pen's fills and lines, one sample a pixel)
+against today's; the words painted over a frame in Python are the same over either and left out of both.
+
 Not drawn by the core: the path tracer.
