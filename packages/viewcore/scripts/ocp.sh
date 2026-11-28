@@ -43,6 +43,10 @@
 # does not exist, "popping from empty stack"). A WebAssembly module has no signals to convert; OCCT's exceptions are
 # C++ exceptions either way. flags.cxx for the binding.
 #
+# Every compile also maps the four directories it is given to fixed names (-ffile-prefix-map), so that a source's own
+# path, which OCCT's checks write into the module as text, is the same wherever the build ran: the wheel names no
+# directory of the machine that built it.
+#
 # Licences of what the wheel contains, written into its .dist-info/licenses: OCCT (GNU LGPL 2.1 with the Open
 # CASCADE exception 1.0; whoever ships the wheel offers OCCT's source at the pinned tag, and this script), OCP's
 # generated sources (Apache-2.0), pybind11 (BSD-3-Clause), fmt (MIT), RapidJSON (MIT; OCCT's glTF writer), and
@@ -130,6 +134,9 @@ MAIN_WASM=$PYROOT/dist/pyodide.asm.wasm
 WASM_OPT=$EMSDK_DIR/upstream/bin/wasm-opt
 
 FLAGS=("${COMMON[@]}")
+# Later maps win where two match (OCCT's source inside the work directory).
+MAP=("-ffile-prefix-map=$EMSDK_DIR=/emsdk" "-ffile-prefix-map=$XBUILDENV=/xbuildenv" "-ffile-prefix-map=$WORK=/work" "-ffile-prefix-map=$OCCT_SRC=/occt")
+MAPPED="file-prefix-map emsdk xbuildenv work occt"   # in the keys in place of MAP, which names this machine's paths
 VARIANT=base
 STAMPS=$WORK/stamps; mkdir -p "$STAMPS"
 key() { printf '%s\n' "$@" | sha256sum | cut -c1-12; }
@@ -344,13 +351,14 @@ LIST_ID=$(cat "$OCPSRC/list-id.txt")
 
 # Each later stage's key: what changes its output. A rerun redoes a stage only when its key changed.
 HEADERS=$WORK/occt-headers-$OCCT_TAG
-FT_KEY=$(key "$FT_COMMIT" "${FLAGS[*]}" "${FTFLAGS[*]}")
+FT_KEY=$(key "$FT_COMMIT" "${FLAGS[*]}" "${FTFLAGS[*]}" "$MAPPED")
 OCCT_KEY=$(key "$OCCT_TAG" "$OCCT_BUILD_TYPE" "${FLAGS[*]} ${OCCTFLAGS[*]}" "$TOOLKITS" "freetype $FT_KEY" "$(sed -n '/^# ---- 3\./,/^# ---- 4\./p' "$0" | sha256sum)")
 OCCT_BUILD=$WORK/occt-$OCCT_KEY OCCT=$WORK/occt-$OCCT_KEY-install FT=$WORK/freetype-$FT_KEY-install
 CXX="em++ ${CXXFLAGS[*]} ${FLAGS[*]} -w -I$OCPSRC -I$SRC/pybind11/include -I$SRC/fmt/include -I$SRC/rapidjson/include \
 -I$OCCT/include/opencascade -I$HEADERS -I$PYINC"
 # The binding reads OCCT's headers only: its key is OCCT's tag and toolkits, not OCCT's flags.
-COMPILE_KEY=$(key "$PREP_KEY" "$OCCT_TAG" "$TOOLKITS" "${CXX//$OCCT/OCCT}")
+COMPILE_KEY=$(key "$PREP_KEY" "$OCCT_TAG" "$TOOLKITS" "${CXX//$OCCT/OCCT}" "$MAPPED")
+CXX="$CXX ${MAP[*]}"
 OBJ=$WORK/obj-$COMPILE_KEY
 LINK_KEY=$(key "$COMPILE_KEY" "$OCCT_KEY" "${LINKFLAGS[*]}" "$([ $NOOPT = 1 ] && echo noopt || echo "${OPTFLAGS[*]}")" \
   "$([ $PLIB = 1 ] && echo "plib ${PLIBFLAGS[*]} $(sha256sum <"$HERE/patches/$PLIB_PATCH")")" "$FT_KEY" \
@@ -364,7 +372,7 @@ if ! done_ "occt-$OCCT_KEY"; then
   if ! done_ "freetype-$FT_KEY"; then
     log "building FreeType $FT_REF"
     emcmake cmake -S "$SRC/freetype" -B "$WORK/freetype-$FT_KEY" -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_C_FLAGS="${FLAGS[*]}" -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX="$FT" "${FTFLAGS[@]}" \
+      -DCMAKE_C_FLAGS="${FLAGS[*]} ${MAP[*]}" -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX="$FT" "${FTFLAGS[@]}" \
       >"$WORK/logs/freetype.log" 2>&1 && make -C "$WORK/freetype-$FT_KEY" -j"$JOBS" install >>"$WORK/logs/freetype.log" 2>&1 ||
       die "FreeType did not build, see $WORK/logs/freetype.log"
     mark "freetype-$FT_KEY"
@@ -373,7 +381,7 @@ if ! done_ "occt-$OCCT_KEY"; then
          -D3RDPARTY_FREETYPE_INCLUDE_DIR_freetype2="$FT/include/freetype2"
          -D3RDPARTY_FREETYPE_LIBRARY="$FT/lib/libfreetype.a" -D3RDPARTY_FREETYPE_LIBRARY_DIR="$FT/lib")
   emcmake cmake -S "$OCCT_SRC" -B "$OCCT_BUILD" -G "Unix Makefiles" -DCMAKE_BUILD_TYPE="$OCCT_BUILD_TYPE" \
-    -DCMAKE_C_FLAGS="${FLAGS[*]} ${OCCTFLAGS[*]}" -DCMAKE_CXX_FLAGS="${FLAGS[*]} ${OCCTFLAGS[*]}" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -DCMAKE_C_FLAGS="${FLAGS[*]} ${OCCTFLAGS[*]} ${MAP[*]}" -DCMAKE_CXX_FLAGS="${FLAGS[*]} ${OCCTFLAGS[*]} ${MAP[*]}" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
     -DBUILD_LIBRARY_TYPE=Static -DINSTALL_DIR="$OCCT" \
     -DBUILD_MODULE_FoundationClasses=ON -DBUILD_MODULE_ModelingData=OFF -DBUILD_MODULE_ModelingAlgorithms=OFF \
     -DBUILD_MODULE_Visualization=OFF -DBUILD_MODULE_ApplicationFramework=OFF -DBUILD_MODULE_DataExchange=OFF \
@@ -429,7 +437,7 @@ if ! done_ "link-$LINK_KEY"; then
     (cd "$OUT/plib" && patch -s -p1 <"$HERE/patches/$PLIB_PATCH")
     read -r DIR CMD < <(python3 -I -c 'import json,sys; e = next(e for e in json.load(open(sys.argv[1])) if e["file"].endswith("/PLib/PLib.cxx")); print(e["directory"], e["command"])' "$OCCT_BUILD/compile_commands.json")
     CMD=${CMD/"$OCCT_SRC/$PLIB_REL"/"$OUT/plib/$PLIB_REL"}
-    CMD="$(echo "$CMD" | sed "s| -o [^ ]*| -o $OUT/plib/PLib.o|") ${PLIBFLAGS[*]}"
+    CMD="$(echo "$CMD" | sed "s| -o [^ ]*| -o $OUT/plib/PLib.o|") ${PLIBFLAGS[*]} -ffile-prefix-map=$OUT/plib=/occt"
     (cd "$DIR" && eval "$CMD") || die "PLib: the patched PLib.cxx did not compile"
     EXTRA+=("$OUT/plib/PLib.o")
   fi
@@ -444,7 +452,7 @@ void occJSConsoleInfo(const char* s) { fprintf(stdout, "%s\n", s); }
 void occJSConsoleWarn(const char* s) { fprintf(stderr, "%s\n", s); }
 void occJSConsoleError(const char* s) { fprintf(stderr, "%s\n", s); }
 C
-  emcc -O2 "${FLAGS[@]}" -c "$OUT/emjs.c" -o "$OUT/emjs.o" || die "the EM_JS stand-ins did not compile"
+  emcc -O2 "${FLAGS[@]}" "${MAP[@]}" -c "$OUT/emjs.c" -o "$OUT/emjs.o" || die "the EM_JS stand-ins did not compile"
   EXTRA+=("$OUT/emjs.o")
   LIBS=$(cd "$OCCT/lib" && ls libTK*.a | sed 's/^lib\(.*\)\.a$/-l\1/' | tr '\n' ' ')
   # The link's own optimisation is low (flags.link); Binaryen optimises the module below, once (flags.wasm_opt).
