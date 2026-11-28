@@ -1,101 +1,161 @@
 # The engine on the WebAssembly kernel: design
 
-How cad's engine runs its kernel processes on the WebAssembly kernel (CPython and the CAD kernel's binding compiled
-to WebAssembly, run by Node), what is in the way, and what each obstacle's answer is. "Done" below means in this
-tree and held by a test or a measurement; "proposed" means not built. Paths are from the repository's root; line
-numbers are this commit's.
+How cad's engine runs on one kernel compiled to WebAssembly, what was in the way, and what each obstacle's answer
+is. "Done" means in this tree and held by a test or a measurement; "open" means not built. Paths are from the
+repository's root (`cad/` is `packages/cad/src/cad/`, `cad_server/` is `packages/cad/src/cad_server/`); line
+numbers are this commit's. The target is an installation with no native kernel; a mixed one (a native kernel
+beside it) keeps working, and is what the tests run in.
+
+## Two programs
+
+| Program | What it is | Ready | Memory | What the engine asks of it |
+|---|---|---|---|---|
+| The kernel's Python (`KERNEL/bin/python`: `python.mjs`) | CPython and the kernel's whole binding under Node 24+ | 9-10 s with the kernel loaded | 1.6-1.9 GB | Builds, exports, checks, a program's own run, a foreign file's read |
+| The view core's job server (`KERNEL/bin/viewcore`: `../node/serve.mjs`) | The kernel's reading side alone under Node 22+ | 0.2 s | 0.1-0.25 GB | A part's mesh, table, measures and facts; an `.xbf` read |
+
+Both live in a **kernel folder** (`make.mjs` makes it: Pyodide's core, the pinned packages unpacked with their
+bytecode, the host's own files, the view core where one is built, `kernel.json`). It names nothing outside itself
+but the Node it runs.
 
 ## The seam
 
 Every kernel process the engine starts runs "the kernel's Python", which one function answers:
-`cad.engine.places.kernel()` (`packages/cad/src/cad/engine/places.py:736`), the server's
-`cad_server._internal.base.kernel` behind it (`packages/cad/src/cad_server/_internal/base.py:344`). It returns
-`{"python", "prefix", "path", "own"}`; the supervisor puts `python` where a service's command says `{python}`
-(`packages/cad/src/cad_server/engine/supervisor.py:331`) and gives an `own` environment's process the engine's
-folder on its import path (`supervisor.py:316`).
+`cad.engine.places.kernel()` (`cad/engine/places.py:759`), the server's `base.kernel` behind it
+(`cad_server/_internal/base.py:344`). Where a person's settings choose the WebAssembly kernel, it answers the
+kernel folder's launcher and two more words:
 
-The WebAssembly kernel enters there and nowhere else. A **kernel folder** (`make.mjs` makes it: Pyodide's core, the
-pinned packages unpacked with their bytecode, `kernel.json`, `bin/python`) has a launcher, `bin/python`, that takes
-CPython's command line (`python.mjs`). Where a person's settings choose it, `base.kernel()` answers that launcher
-and one more word, `wasm`, which three places read: the supervisor, which gives its processes the engine's folder
-as it gives an `own` environment's (`supervisor.py:312`); the pools (`serve._process_pool`,
-`packages/cad/src/cad/engine/serve.py:500`); and the builds' leases (`Daemon.caller`,
-`packages/cad/src/cad_server/engine/daemon.py:981`). It is never `own`: its libraries are not the server's, so what
-measures a manufacturing check there is what its processes say (`packages/cad/src/cad_server/engine/checks.py:394`).
-The worker's protocol, its contract number and every request
-are unchanged; the server, the client and the door stay on the native Python that runs them.
+- `wasm`, read by the supervisor, which gives its processes the engine's folder as it gives an `own` environment's
+  (`cad_server/engine/supervisor.py:313`); by the builds' leases (`cad_server/engine/daemon.py:989`); and by the
+  pools (`cad/engine/serve.py:489`). It is never `own`: its libraries are not the server's, so what measures a
+  manufacturing check there is what its processes say (`cad_server/engine/checks.py:394`).
+- `core`, the view core's launcher, where the folder carries one: the pools are then a `CorePool`
+  (`cad/engine/core_pool.py`, `serve.py:510`).
+
+The worker's protocol, its contract number and every request are unchanged.
 
 | Process | Command | On the WebAssembly kernel |
 |---|---|---|
-| worker (a script's builds, exports, measures) | `{python} -X faulthandler -P -m cad.engine.worker` | runs (done) |
-| standby worker | the same, kernel loaded ahead | runs (done) |
-| checks process | the worker's program | starts; see DFM below |
-| meshing and reading pools | `multiprocessing` spawn pool | `kernel_pool.KernelPool` (done) |
-| render process (stills) | `{python} -P -m cad.engine.render.service` | cannot: OpenGL (below) |
-| a script's own process (`python model.py`, `cad run`) | the caller's Python | native, hands the build over (below) |
+| worker, standby, checks process | `{python} -X faulthandler -P -m cad.engine.worker` | the kernel's Python (done) |
+| meshing and reading pools | a `multiprocessing` spawn pool | the view core's job server; a kernel process for what it does not answer (done) |
+| a program (`cad run model.py`) | the environment's Python | the kernel's Python, asking the engine through a relay (done) |
+| render process (stills) | `{python} -P -m cad.engine.render.service` | cannot draw: see Stills |
 
 ## The setting
 
-A person's setting, in `settings.json` beside the engine's other settings, read by `base.wasm_kernel()`
-(`base.py:379`):
+In `settings.json` beside the engine's other settings, read by `base.wasm_kernel()` (`base.py:379`):
 
     "kernel": {"kind": "wasm", "folder": "/absolute/path/to/a/kernel/folder"}
 
-No section, or `{"kind": "native"}`, is the base as before. A folder that is no kernel folder is refused in one
-line; nothing falls back to the kernel the person did not choose. No environment variable selects it. Proposed:
-`folder` becomes optional once the engine makes the kernel folder itself (below), and `cad setup`/the settings page
-write the section.
+No section, or `{"kind": "native"}`, is the native base as before. A folder that is no kernel folder is refused in
+one line; nothing falls back to the kernel the person did not choose. The suites run on it by
+`scripts/test/test-python.sh --kernel FOLDER`, which gives each test's state folder that setting.
 
 ## Obstacles
 
 | # | Obstacle | Where | Answer | State |
 |---|---|---|---|---|
-| 1 | The binding's `OCP` is one extension module, which the lazy import of the kernel wrapped: `from OCP.BRep import ...` asked for a submodule before the body had made it | `packages/cad/src/cad/_internal/lazy_kernel.py:83` | A kernel that is one extension module and no package is imported as ever; packages (the native binding, `build123d`) stay lazy. Native behaviour identical | done, tested |
-| 2 | No threads: the worker's reader thread, which answers `where` during a build and lets the loop wait for idleness | `packages/cad/src/cad/engine/worker.py:980` | `places.THREADS` (`places.py:48`). Without threads the loop reads each request when it comes for it: `where` is answered between requests, and the idle collection runs at once after a request | done, tested |
-| 3 | No threads: the timer that says "loading the CAD kernel" during a slow load | `worker.py:435` | Said after the load, if it took that long | done |
-| 4 | No threads: the timer that sends a held progress frame | `packages/cad/src/cad/engine/progress.py:158` | No frame is held: each is sent as it is said (a held one would wait out the step after it, and a page would show the step before). A thousand small steps send a thousand frames | done, tested |
-| 5 | No `multiprocessing`: the meshing and reading pools are spawn pools | `serve.py:489`, `serve.py:1487`, `serve.py:1499` | `KernelPool` (`packages/cad/src/cad/engine/kernel_pool.py`): the part of `ProcessPoolExecutor` the pools use, over kernel processes started as programs and spoken to in length-prefixed pickles on their streams. Capped at 2 processes a pool (each holds the whole kernel); a process is kept across jobs (`max_tasks_per_child` not honoured: a start costs seconds); a process ends when its input closes, which replaces `exit_with_parent`'s thread (`serve.py:637`) | done, tested |
-| 6 | A worker's own memory: no `resource`, no `ps` | `worker.py:110`, `worker.py:368` | Read from `/proc/self/status` (the host mounts `/proc`) | done (Linux); macOS proposed: the host answers `process.memoryUsage().rss` |
-| 7 | The platform's own answers where the system's are wanted: every process is pid 42, a file's inode is invented, its times are rounded to the millisecond, a new file ignores the process's mask, `os.chdir` moves the program and not the process, and the packages' `.pth` files and `sitecustomize` are not read at start | `python.mjs`, `bootstrap.py` | The host answers as CPython on the computer does: pid; inode and device wherever a file's facts are read; nanosecond times by path, open file and open folder; `umask`; the process's own folder; `.pth` and `sitecustomize` after the path is made (not with `-S`), `PYTHONPATH` unread with `-E`/`-I` | done, measured (before: a staged write left its folder behind, an idle worker held its project's folder) |
-| 8 | Builds in the caller's own Python (a lease): the caller's Python is native | `daemon.py:981` | On this kernel every script is built in the kernel's worker, whatever Python ran it. A script that needs a package the kernel folder lacks fails as a missing import | done, tested |
-| 9 | A script as `__main__`: `python model.py` runs the script natively until the engine takes the build (`packages/cad/src/cad/engine/client.py`), then the worker runs it again as `__main__` | `client.py:472`, `worker.py:1026` | Unchanged where a native Python with `cad` exists: the client never loads a kernel (the lazy import). Proposed for an install with no native kernel: `cad run` sends the build order (the script's path) to the engine and runs nothing itself; `import build123d` in a bare native `python model.py` stays an import error there | part done |
-| 10 | Scripts that name their own packages (`# /// script`) | `packages/cad/src/cad_server/_internal/extras.py:165`, `packages/cad/src/cad_server/cli/run.py:525` | Not answered. `cad run` makes a native environment for them and the build asks for a lease in it, which obstacle 8 ignores. Proposed: pure-Python requirements installed into a per-script folder put on the worker's path; a requirement with native code refused in one line naming it | open |
-| 11 | The STEP reader is a child process of the process that reads | `packages/cad/src/cad/engine/reader.py:399` | Where the Python starts no process the parse is the reading process's own (`reader.py:409`), answered and refused in the reader process's words; the parse's working memory stays in the worker, which the server's ceiling on a worker's memory answers | done, tested |
-| 12 | Analyses that start processes or threads inside a build: interference (guard and worker processes, threads), convex hulls (an outside program), DFM measured in a child with a watcher thread | `packages/cad/src/cad/build123d/_interference.py:656,703,728,741`, `packages/cad/src/cad/engine/hulls.py:242,261`, `packages/cad/src/cad/_internal/manufacturing.py:642,703` | Proposed: each already has an in-process path or needs one (`manufacturing.py:616` measures in the process where there is no interpreter to start); limits by time and memory then belong to the worker's supervisor. Outside programs stay native: asked of the server | open |
-| 13 | Stills: OCCT's viewer draws through OpenGL on an X display; the binding has no `OCP.OpenGl` | `packages/cad/src/cad/engine/render/context.py:262`, `service.py` | Cannot run on this kernel. Options: (a) the render process stays on a native base where one is installed (it draws triangulations, it models nothing); (b) stills drawn by the viewer's own renderer in a headless browser; (c) refused in one line. A person's decision | open |
-| 14 | Integrations that are other programs (KiCad, CalculiX, MuJoCo, Netgen, CoACD, `fc-match`) | `packages/cad/src/cad/kicad/`, `calculix/`, `mujoco/`, `netgen/_mesher.py:59`, `engine/render/text.py:76` | Not kernel processes: they run from native Python and stay there. One called from inside a build would need the server to run it | open |
-| 15 | The build closure's libraries: the release of what a body runs on | `packages/cad/src/cad/engine/previous.py:130` | The WebAssembly binding's distribution is named there, so a build's closure differs from a native build's by design and nothing built on one kernel is taken as built on the other | done |
-| 16 | Signals | none in a kernel process (`_interference.py:635` only, in its guard) | Nothing to do: a worker is stopped by closing its input or by the supervisor's kill of the host process | done |
-| 17 | Named pipes, the door, sockets | `packages/cad/src/cad/engine/door.py`, `client.py:97` | Server and client only; a kernel process speaks on its standard streams, which the host passes as bytes | done |
-| 18 | Start-up cost: the binding's 104 MB module and build123d's imports of scipy, scikit-learn, IPython | `make.mjs`, `bootstrap.py` | Packages unpacked once with bytecode and mounted; imports of packages a build calls nothing of are deferred to first use by a finder that imports the real package then (never a stub) | done, measured |
-| 19 | Node 22's V8 holds over 4 GB for this kernel | `python.mjs:27` | Refused in one line under Node 24 | done |
-| 20 | Windows | `python.mjs` (mounts), `make.mjs` (launcher) | The launcher is a POSIX shell script and the host mounts POSIX paths. Proposed: a `.cmd` launcher and drive mounts | open |
+| 1 | The binding's `OCP` is one extension module, which the lazy import of the kernel wrapped | `cad/_internal/lazy_kernel.py:83` | One extension module and no package is imported as ever; native behaviour identical | done, tested |
+| 2 | No threads: the worker's reader thread, the kernel-load notice, the progress timer | `cad/engine/worker.py:435,949,980`, `cad/engine/progress.py:158` | `places.THREADS` (`places.py:48`): the loop reads each request in turn, `where` is answered between requests, no progress frame is held | done, tested |
+| 3 | No `multiprocessing`: the pools | `serve.py:489` | `CorePool` for the jobs the view core answers; `KernelPool` (`cad/engine/kernel_pool.py`, capped at 2) for the rest | done, tested, measured |
+| 4 | Threads and processes inside a build or a check: the mesher's inline thread, interference's crew and guard, a check's watched child, the STEP reader process | `serve.py:749,759`, `cad/build123d/_interference.py:702`, `cad/_internal/manufacturing.py:620`, `cad/engine/reader.py:409` | Each runs in the one thread where `places.THREADS` is false; a check's time is kept between pairs, and the limits on a whole process are its supervisor's | done, tested |
+| 5 | CoACD (convex hulls) is native code with no WebAssembly wheel | `cad/engine/hulls.py:302` | Refused in one line naming the platform; nothing is started | done, tested |
+| 6 | The platform's own answers where the system's are wanted: pid 42, invented inodes, times to the millisecond, no umask, `os.chdir` moving the program and not the process, no `.pth`/`sitecustomize`, no sockets | `python.mjs`, `bootstrap.py` | The host answers as CPython on the computer does; sockets that connect are the host's (a thread of its own does the I/O) | done, measured |
+| 7 | 32-bit index type: numpy takes no 64-bit array for repeat counts or `reduceat` indices | `cad/engine/ranges.py:392-399,467` | Those counts are `np.intp`. The other sites are not audited: see What is open | part done |
+| 8 | Builds in the caller's own Python (a lease) | `daemon.py:989` | Every script is built in the kernel's worker | done, tested |
+| 9 | A program's own run: `cad run model.py` runs the program, which decides what it calls (law 11) | `cad_server/cli/run.py:447,464` | The program runs on the kernel's Python; that Python has no pipes to dial the door with, so its `cad run` holds a relay it connects to (`cad/engine/relay.py`, `cad/engine/client.py:96`) | done, tested, measured (4.7 s a warm run) |
+| 10 | A script's own packages (`# /// script`, `--with`) | `cad_server/_internal/kernel_packages.py` | uv resolves them; what the kernel folder does not carry is installed, pure Python alone, in a folder of the cache on the program's path; one with native code is refused in one line naming it | done, tested |
+| 11 | Stills: OCCT's viewer draws through OpenGL; the binding has no `OCP.OpenGl` | `cad/engine/render/context.py:69` | A kernel process refuses a picture at once (`KernelDrawsNothing`); see Stills | refusal done; drawing open |
+| 12 | Integrations that are other programs (KiCad, CalculiX, MuJoCo, Netgen, Blender) | `cad/kicad/`, `calculix/`, `mujoco/`, `netgen/` | Not kernel processes: `cad run` gives a program that uses one its own native environment, as before | unchanged |
+| 13 | The build closure's libraries | `cad/engine/previous.py:130` | The WebAssembly binding's distribution is named: nothing built on one kernel is taken as built on the other | done |
+| 14 | Start-up: the binding's 104 MB module, build123d's imports of scipy, scikit-learn, IPython; Node 22 holding over 4 GB | `make.mjs`, `bootstrap.py`, `python.mjs:27` | Packages unpacked once with bytecode; imports a build calls nothing of deferred to first use by a finder that imports the real package then; Node 24 required, refused in one line under it | done, measured |
+| 15 | Windows | `python.mjs` (mounts), `make.mjs` (launchers) | The launchers are POSIX shell scripts and the host mounts POSIX paths | open |
 
-## Memory and time
+## The pools' job seam
 
-Each kernel process is a whole host with its own copy of the kernel: 1.6-1.9 GB resident (Node 24), against a
-native worker's ~0.45 GB. A served model holds a worker and, once meshed and read, up to four pool processes.
-Proposed, in order of yield: one process serves both pools; the view core (below) takes the reading and meshing
-for viewing, which removes the pools from the common path.
+`serve.py`'s pool jobs, as `CorePool` asks them of the view core's job server (`core_pool.request`), and what each
+answers. A frame, both ways: 8 bytes, the length of the rest; 4 bytes, the header's length; the header, one JSON
+object; the payloads end to end, their lengths the header's `payloads`.
+
+| The engine's job | Arguments | The core's job | Answer (the engine's own shape) |
+|---|---|---|---|
+| `_timed(data, parallel)` | a part's shape bytes | `mesh`, the bytes | `(XBM2 buffer, {ordinal: why unmeshed}, seconds)` |
+| `_table(key, data, unmeshed, measure)` | geometry key, shape bytes, unmeshed ordinals | `table {key, unmeshed, measure}`, the bytes | `(table JSON bytes, measures or None)` |
+| `_measured(batch)` | `[(key, shape bytes)]` | `measured {keys}`, each part's bytes | `[(key, measures)]` |
+| `_topology_fact(key, data, method, args)` | `face`, `edge`, `vertex`, `groups`, `elements`, `measured` | `fact {key, method, args}`, the bytes | the JSON value |
+| `_read_document(path)` for an `.xbf` | the file's path | `read_xbf {path}` | `(structure, (mtime_ns, size), {key: shape bytes}, {key: name})`: the core's structure with `path` (resolved), `version` and tuples for colours put in, `tessellation` and `closure` taken out |
+| `_ready()`, `int` (a pool's warm-up) | | `about` | `True`, `0` |
+| `_pose_structure`, `_read_foreign` (STEP, DXF, a robot), a live shape | | none | a kernel process's (`KernelPool`), started for the first of them |
+
+What the core refuses is the job's `ValueError` in the core's words; a process that dies fails its job alone
+(`BrokenProcessPool`) and the next job starts another. Exports stay the worker's: the engine's export path has
+decorators, tolerance options and motion rules the core's `export` job does not take.
+
+Measured, a 249-part model served (`first mesh` is a page's first part): 13.1 s to serve and 12.3 s to the first
+mesh with three kernel processes holding 5,155 MB, against 1.1 s and 1.0 s with five job servers holding 802 MB.
+
+## Stills
+
+**What draws today.** `cad/engine/render/` is 6,660 lines. A render process holds a document as the engine serves
+it: the structure (JSON), each part's XBM2 mesh buffer (positions, normals, triangles by face, feature-edge
+polylines), its paints (`faceColors`, `faceMaterials`), and draws a `snapshot.Still` to PNG bytes and a report.
+Nothing in it models: `shapes.py` makes triangulation-only OCCT shapes of the buffers so that OCCT's viewer has
+something to present.
+
+| Part | Lines | Files | For a new renderer |
+|---|---|---|---|
+| OCCT drawing | 2,688 | `occt.py` (`Scene`, 1,494), `context.py` (the OpenGL canvas, 454), `finish.py` (materials as OCCT aspects, 275), `shapes.py` (252), `clip.py` (clip planes and capping, 213) | replaced |
+| Partly OCCT | 1,455 | `service.py` (what a renderer holds, the frames, the camera's fitting: 2 imports of OCCT), `grid.py` (7), `drawing.py` (a DXF drawn: 4) | kept, their OCCT calls moved behind the seam |
+| Plain Python | 2,517 | `board.py`, `schematic.py`, `text.py` (text by Pillow), `overlay.py` (ink over pixels), `explode.py`, `look.py` (the lights and the environment image), `board_refs.py`, `meshes.py` | kept as they are |
+
+**The seam a renderer fills** is `occt.Scene`'s: made of `(structure, {key: XBM2 buffer}, size)`, then
+`show(display, preview)` (the display modes: shaded, with or without edges, hidden parts, transparency),
+`_clip(clip)` (a plane, its cut capped), `explode(amount)`, `grid(on)`, `frame(camera, projection, focal_length)`
+(a preset, `az:el`, or a view's own camera: position, target, up; orthographic or perspective) answering the camera
+used, `project(points)`, `placed_points()`, `box_corners()` and `rest_bounds()` (what `service.frame_camera` fits a
+camera with, and what `overlay.py` places ink by), `annotate(annotation)` and `measure(marks)` (ribbons, polylines
+and text quads in the scene), `backdrop(colour)` (or none: a picture on nothing, its alpha kept),
+`preview_look()` (the Preview look: image-based lighting from `studio.hdr`, a floor, a contact shadow, tone
+mapping) and `path_trace(out, samples)`, `painter()`/`save(out)` (the frame as RGBA pixels, `width` x `height`,
+supersampled where the still asks), `close()`. It answers pixels and a report (size, camera, timings, unmeshed
+faces, warnings).
+
+**Three ways to fill it**, by cost:
+
+1. *A software rasterizer in the view core.* It already holds the meshes and the structure. A z-buffered triangle
+   rasterizer with per-face colour, feature edges as lines, one clip plane with capping, alpha, supersampling and a
+   projected grid covers the display modes; the Preview look (image lighting, contact shadow, tone mapping) is a
+   second step, and path tracing is not on offer. No new dependency, the same pictures on every computer, about the
+   2,700 lines above to write again in C++ behind a `still` job, and every picture the tests pin drawn anew.
+2. *The viewer's own renderer in a headless browser.* The page already draws the same structure and buffers with
+   every mode, clip, explode, grid and annotation. A still is then a page loaded with the still as its state and its
+   canvas read. Nothing to write in the renderer, and stills match what a person sees; it needs a browser on the
+   computer (Chromium is 150-300 MB, or the person's own by the DevTools protocol) and software WebGL where there
+   is no GPU.
+3. *A native render process as a drawing-only dependency.* In a mixed install this works today
+   (`places.drawing`, `base.py:418`: the render process runs in the native kernel the installation has beside it,
+   and a worker's own picture is redrawn there from an exported `.xbf`: `snapshot.elsewhere`). It is not a
+   destination: one kernel everywhere excludes it.
+
+**An installation with no native kernel** refuses a still in one line (`base.NO_DRAWING`): "a still is drawn by
+the native CAD kernel's OpenGL viewer, which this installation does not have: its kernel is the WebAssembly one.
+See the model on its page instead (cad show), or choose the native kernel ... and ask again".
 
 ## How the kernel folder is obtained
 
-Today by hand: `node make.mjs PACKAGES_DIR KERNEL_DIR`, from a folder holding Pyodide's core and the pinned
-wheels. Proposed, a person's decision because it adds to what cad installs:
+By hand today: `node fetch.mjs PACKAGES_DIR` (every file checked against the sha256 `pins.json` names), then
+`node make.mjs PACKAGES_DIR KERNEL_DIR`. Node 24 or later is found on `PATH` and refused in one line otherwise;
+shipping one is a person's decision. Open: the engine making the folder itself on first need, as it makes the
+native base, from a lock shipped with cad.
 
-- **The packages**: a lock file shipped in cad naming each file by URL and SHA-256 (Pyodide's core and wheels from
-  its release, the binding's wheel from where it is published, build123d and its pure-Python requirements from the
-  index). The server's one making (`base.MAKING`, which makes the native base today) downloads them into the cache
-  and makes the kernel folder there, with the same lines said, the same failure memory, the same refusal offline.
-- **Node**: Node 24 or later found on `PATH`, else from an extra (`cad[wasm]`) that depends on a Node wheel; the
-  one on the index (`nodejs-wheel-binaries`, about 60 MB) is unofficial. Nothing is added to cad's default install.
+## What is open
 
-## What the view core should serve
-
-The view core (the kernel's reading side compiled alone, run by wasmtime or a browser) reads a model's `.xbf` and
-answers structure, meshes, element lookups and measures in a few megabytes and milliseconds. On an engine whose
-kernel is this one, those requests are the pools' whole work: proposed, the server asks the view core for them
-(by wasmtime, as a library in the server's process) and keeps kernel processes for what needs the modelling kernel:
-builds, exports the core does not write, analyses. That is the change that makes the memory above tolerable, and
-it needs the core's interface to take a document's bytes and answer the engine's own shapes of result; it is not
-built here.
+1. Stills on an installation with no native kernel (above).
+2. The engine making the kernel folder itself; `folder` optional in the setting.
+3. 32-bit integers: numpy's default integer is 32 bits here. The sites that failed loudly in the suites are fixed;
+   code that relied on a 64-bit default silently is not audited (the manufacturing checks and `ranges.py` use
+   explicit 64-bit keys where they multiply cell indexes).
+4. A model's body cannot listen on a socket, start a thread or a process: a script that does fails there.
+5. Memory: a worker is 1.6-1.9 GB against a native worker's 0.45 GB, and the engine's caps are sized for the
+   native one.
+6. Windows, and a macOS worker's own memory reading.
+7. This host has no test a CI job runs: the kernel folder is made by hand.
