@@ -14,10 +14,11 @@ import types
 
 
 def _process(host) -> None:
-    """The process's own id: the platform answers 42 for every process, and the engine names a kernel process by
-    its id (its ``ready`` frame, its memory)."""
-    pid = int(host["pid"])
+    """The process's own id and its parent's: the platform answers 42 for every process, and the engine names a
+    kernel process by its id (its ``ready`` frame, its memory)."""
+    pid, parent = int(host["pid"]), int(host["ppid"])
     os.getpid = lambda: pid
+    os.getppid = lambda: parent
 
 
 def _files(host, real) -> None:
@@ -416,7 +417,9 @@ def _site(host) -> None:
             importlib.import_module(name)
         except ImportError as error:
             if error.name != name:
-                raise
+                print(f"Error in {name}; set PYTHONVERBOSE for traceback:\n{type(error).__name__}: {error}", file=sys.stderr)
+        except Exception as error:  # noqa: BLE001 - as ``site`` does: said, and the program goes on
+            print(f"Error in {name}; set PYTHONVERBOSE for traceback:\n{type(error).__name__}: {error}", file=sys.stderr)
 
 
 def main(host, real, net) -> int:
@@ -429,6 +432,7 @@ def main(host, real, net) -> int:
     _files(host, real)
     _libraries(host)
     sys.executable = host["executable"]
+    sys.orig_argv = [host["executable"], *host["args"]]  # the command line this Python was started with
     sys.argv = [host["target"] if host["kind"] == "script" else ("-c" if host["kind"] == "code" else host["target"]),
                 *host["argv"]]
     _path(host)

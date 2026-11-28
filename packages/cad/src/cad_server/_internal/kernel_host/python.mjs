@@ -192,6 +192,8 @@ FS.open = (file, flags, mode) => openFile(file, flags, typeof mode === "number" 
 
 pyodide.globals.set("_host", pyodide.toPy({
   pid: process.pid,
+  ppid: process.ppid,
+  args: process.argv.slice(2),
   cwd: process.cwd(),
   executable: process.env.CAD_KERNEL_PYTHON || path.join(home, "bin", "python"),
   kind: run.kind,
