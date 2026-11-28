@@ -1,10 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Vector3 } from "three";
-import { MoreHorizontal } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@cad/ui/primitives/dropdown-menu";
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { cn } from "@cad/ui/utils";
-import { FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
+import { FLOATING_CHROME_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
 
 // How far the bar keeps from what it is about, and from the view's edges and its chrome, in px.
 const GAP = 10;
@@ -64,20 +62,15 @@ const cssPx = (style, name) => {
 /**
  * What Select has picked, its bar: a small floating toolbar just above the picked parts (below them where there is no
  * room above), following them as the camera moves, as the bar over picked ink does (`AnnotationSelectionBar.jsx`), on
- * the strip's surface a size smaller. It holds the few things a person does to a pick there and then (the renderer's
- * `actions`: Isolate, Hide, Zoom to selection), then More, the rest of the view's menu for the same pick (`menu`, the
- * view menu's entries, `viewMenu.js`), so nothing in it is only here. It keeps clear of the strip's column and of
- * Quick Edit, and steps aside while what it is about is off the view.
+ * the strip's surface a size smaller. It holds only the few things a person does to a pick there and then (the
+ * renderer's `actions`: Isolate, Hide); the rest stays in the view's menu (a right click, a long press). It keeps clear
+ * of the strip's column and of Quick Edit, and steps aside while what it is about is off the view.
  *
  * @param {{ runtimeRef: { current: object | null }, viewerReadyTick?: number, bounds(): ({ min: number[], max: number[] } | null),
- *   boundsKey: string, label: string, moreLabel: string, disabled?: boolean,
- *   actions: { id: string, label: string, icon: import("react").ReactNode, onSelect(): void, disabled?: boolean, active?: boolean }[],
- *   menu?: (() => { id: string, label: import("react").ReactNode, disabled?: boolean, separatorBefore?: boolean, onSelect?: () => void }[]) | null,
- *   onMenuOpen?: (() => void) | null }} props
- *   `menu` is asked for its entries while More's menu is open; `onMenuOpen` hears each time it opens.
+ *   boundsKey: string, label: string, disabled?: boolean,
+ *   actions: { id: string, label: string, icon: import("react").ReactNode, onSelect(): void, disabled?: boolean, active?: boolean }[] }} props
  */
-export default function SelectionActionBar({ runtimeRef, viewerReadyTick = 0, bounds, boundsKey, label, moreLabel, actions, menu = null, onMenuOpen = null,
-  disabled = false }) {
+export default function SelectionActionBar({ runtimeRef, viewerReadyTick = 0, bounds, boundsKey, label, actions, disabled = false }) {
   const boundsRef = useRef(bounds);
   boundsRef.current = bounds;
   const bar = useRef(/** @type {HTMLDivElement | null} */ (null));
@@ -85,7 +78,6 @@ export default function SelectionActionBar({ runtimeRef, viewerReadyTick = 0, bo
   const [size, setSize] = useState({ width: 0, height: 0 });
   sizeRef.current = size;
   const [place, setPlace] = useState(/** @type {{ left: number, top: number } | null} */ (null));
-  const [menuOpen, setMenuOpen] = useState(false);
   // Each frame, where the pick falls on the screen: what is picked can move without the camera (the renderer moving it),
   // so the box is read every frame, and the bar moves only when where it stands has.
   useEffect(() => {
@@ -113,11 +105,8 @@ export default function SelectionActionBar({ runtimeRef, viewerReadyTick = 0, bo
     const element = bar.current;
     if (element && (element.offsetWidth !== size.width || element.offsetHeight !== size.height)) setSize({ width: element.offsetWidth, height: element.offsetHeight });
   });
-  // A new pick is not the open menu's pick any more.
-  useEffect(() => { setMenuOpen(false); }, [boundsKey]);
-  // Off the view, the bar (and its menu) goes; it comes back with the pick.
+  // Off the view, the bar goes; it comes back with the pick.
   if (!place) return null;
-  const entries = menuOpen && menu ? menu() : [];
   return <div ref={bar} role="toolbar" aria-label={label} data-selection-action-bar=""
     className={cn(FLOATING_CHROME_SURFACE_CLASS, "pointer-events-auto absolute z-20 flex items-center gap-0.5 rounded-md p-0.5", size.width ? null : "invisible")}
     style={place} onPointerDown={event => event.stopPropagation()} onContextMenu={event => event.stopPropagation()}>
@@ -125,22 +114,5 @@ export default function SelectionActionBar({ runtimeRef, viewerReadyTick = 0, bo
       disabled={disabled || action.disabled === true} data-action={action.id} onClick={() => action.onSelect()}>
       {action.icon}
     </ToolbarButton>)}
-    {menu ? <>
-      <span role="separator" aria-orientation="vertical" className="mx-0.5 h-4 w-px bg-border" />
-      <DropdownMenu open={menuOpen} onOpenChange={open => { setMenuOpen(open); if (open) onMenuOpen?.(); }}>
-        <DropdownMenuTrigger asChild>
-          <ToolbarButton tooltip={moreLabel} tooltipSide="top" label={moreLabel} disabled={disabled} data-action="more">
-            <MoreHorizontal className="size-3" strokeWidth={2} aria-hidden="true" />
-          </ToolbarButton>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" side="bottom" sideOffset={4} className={cn(FLOATING_SURFACE_CLASS, "w-44")}
-          onContextMenu={event => { event.preventDefault(); event.stopPropagation(); }}>
-          {entries.map(item => <div key={item.id} className="contents">
-            {item.separatorBefore ? <DropdownMenuSeparator /> : null}
-            <DropdownMenuItem disabled={item.disabled === true} onSelect={() => item.onSelect?.()}>{item.label}</DropdownMenuItem>
-          </div>)}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </> : null}
   </div>;
 }

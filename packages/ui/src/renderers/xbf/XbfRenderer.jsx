@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { EyeOff, Focus, ZoomIn } from "lucide-react";
+import { EyeOff, Focus } from "lucide-react";
 import { viewFeaturesForKind } from "@cad/core/common/viewSettings.js";
 import { sceneFramingBounds } from "@cad/core/lib/viewer/sceneContract.js";
 import { boundsInUnits } from "@cad/core/lib/viewer/sceneUnits.js";
@@ -37,7 +37,7 @@ import XbfParametersSection, { useXbfParameters } from "./XbfParametersSection.j
 import { MeasureIcon, SelectIcon, SelectMenu, XBF_SELECT_DEFAULT, xbfSelectBadge } from "./XbfSelectionModes.jsx";
 import { useXbfElementFacts, useXbfSelectionChips, xbfCopyText, xbfDescriber, xbfNodeRefs, xbfTipper } from "./xbfChips.jsx";
 import { xbfJointHandles } from "./xbfJointHandles.js";
-import { assemblyPartMenuEntries, viewportMenuEntries } from "./xbfMenuItems.js";
+import { viewportMenuEntries } from "./xbfMenuItems.js";
 import { xbfModelMenu, xbfPartMenu, xbfTangentSources, xbfTopologyMenu } from "./xbfMenus.js";
 import { nextSelectionIds, tangentChain, withTangentChains, xbfGeometryPicks } from "./xbfSelectionFilter.js";
 import { isXbfAssemblyId, presentXbfTree, xbfAssemblyIds, xbfCoveringIds, xbfPickFrontier } from "./xbfTree.js";
@@ -821,8 +821,8 @@ function XbfSurface({ view, data }) {
   const visibilityRow = selectActive ? <VisibilityRow hiddenCount={hiddenIds.length} disabled={shell.idle}
     onShowAll={() => { usage.used("hidden_show_all"); showAll(); }} onUndo={undoable ? () => { usage.used("hidden_undo"); undoHide(); } : null}
     isolatedCount={assembly ? isolatedIds.length : 0} onExitIsolate={() => { usage.used("hidden_exit_isolate"); exitIsolate(); }} /> : null;
-  // The bar over the parts Select has picked in an assembly (`SelectionActionBar.jsx`): Isolate, Hide, Zoom to selection,
-  // then More, the part menu's every entry for the same pick.
+  // The bar over the parts Select has picked in an assembly (`SelectionActionBar.jsx`): Isolate and Hide; the rest is
+  // the view's menu.
   const barShown = selectActive && assembly && selectedNodeIds.length > 0 && !shell.idle;
   const barIsolated = barShown && selectedNodeIds.every(id => isolatedIds.includes(id));
   const barActions = barShown ? [
@@ -833,11 +833,8 @@ function XbfSurface({ view, data }) {
         isolate(selectedNodeIds, { keepSelection: true });
       } },
     { id: "hide", label: t("tree.hide"), icon: <EyeOff className="size-3" strokeWidth={2} aria-hidden="true" />,
-      onSelect: () => { usage.used("selection_bar_hide"); hideNodes(selectedNodeIds); } },
-    { id: "zoom-selection", label: t("menu.zoomToSelection"), icon: <ZoomIn className="size-3" strokeWidth={2} aria-hidden="true" />,
-      onSelect: () => { usage.used("selection_bar_zoom"); zoomToSelection(); } }
+      onSelect: () => { usage.used("selection_bar_hide"); hideNodes(selectedNodeIds); } }
   ] : null;
-  const barMenu = () => assemblyPartMenuEntries(menuForNode(selectedNodeIds[0]), { actions: partMenuActions, t });
   const barBounds = () => scene?.selectionBounds(leavesOf(selectedNodeIds)) || null;
 
   return <RendererShell shell={shell} tools={strip} subToolbar={effects.subToolbar ?? (measuring ? <MeasurementsBar measure={measure} /> : visibilityRow)} sidebar={sidebar} previewView={previewView}
@@ -859,8 +856,8 @@ function XbfSurface({ view, data }) {
           filter={measureFilter} source={source} fetch={engineFetch} onHoverElement={hoverElement} onDoublePick={handleMeasureDoublePick} />
         {handles ? <JointHandleOverlay handles={handles} layoutSeamRef={handleLayoutRef} {...viewport} /> : null}
         {barActions ? <SelectionActionBar runtimeRef={viewport.runtimeRef} viewerReadyTick={viewport.viewerReadyTick} bounds={barBounds}
-          boundsKey={`${selectedNodeIds.join(",")}:${loaded.revision}`} label={t("selection.actions")} moreLabel={t("selection.more")}
-          actions={barActions} menu={barMenu} onMenuOpen={() => usage.used("selection_bar_more")} /> : null}
+          boundsKey={`${selectedNodeIds.join(",")}:${loaded.revision}`} label={t("selection.actions")}
+          actions={barActions} /> : null}
         <XbfPick viewport={viewport} scene={picker} enabled={picking} onPick={handlePick} takesAway={pickTakesAway} onHover={handleHover} onDoublePick={handleDoublePick}
           deferRef={deferPickRef} pointerTypeRef={pointerTypeRef} />
       </>;

@@ -92,8 +92,7 @@ test('an engine document (a STEP\'s renderer) has its Model tab from the first f
   }
 });
 
-// A part picked in an assembly gets a bar just above it (`SelectionActionBar.jsx`): Isolate, Hide, Zoom to selection, a
-// rule, More. Hide takes it away and says so under the strip, with Undo (which brings it back, picked again) and Show
+// A part picked in an assembly gets a bar just above it (`SelectionActionBar.jsx`): Isolate and Hide. Hide takes it away and says so under the strip, with Undo (which brings it back, picked again) and Show
 // all; Isolate keeps the pick, its button pressed, and the row under the strip offers Exit isolate.
 test('a part picked in an assembly has a bar over it: Hide with Undo and Show all under the strip, Isolate with its exit', async (t) => {
   const harness = await serveXbfHarness(t);
@@ -111,7 +110,7 @@ test('a part picked in an assembly has a bar over it: Hide with Undo and Show al
   await bar.waitFor();
   const controls = await bar.locator('button, [role=separator]').evaluateAll(elements => elements
     .map(element => (element.getAttribute('role') === 'separator' ? '|' : element.getAttribute('aria-label'))));
-  assert.deepEqual(controls, ['Isolate', 'Hide', 'Zoom to selection', '|', 'More actions']);
+  assert.deepEqual(controls, ['Isolate', 'Hide']);
   // Above the part, inside the view, clear of the strip.
   const [placed, canvas, strip] = await Promise.all([bar.boundingBox(), pane.locator('[data-cad-canvas] canvas').first().boundingBox(),
     pane.locator('[data-cad-toolbar="tools"]').first().boundingBox()]);

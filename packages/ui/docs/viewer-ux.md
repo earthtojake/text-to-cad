@@ -529,10 +529,10 @@ a schematic. On a STEP or .xbf, Measure carries one too.
 - **The bar over a pick.** On a STEP or .xbf assembly, the parts Select has picked get a small bar just above them
   (below where there is no room above), following them as the camera or an Explode moves them, kept clear of the strip
   and of Quick Edit, and gone while they are off the view: Isolate (pressed while they are isolated: a press then leaves
-  isolation), Hide, Zoom to selection, a rule, and More, the view's menu for the same pick. Isolate from the bar keeps
-  the pick, so the bar stays. Why: the actions a person takes on a part there and then, at the part, rather than in a
-  menu they must know to long-press for or in a panel that covers the model on a phone. As the bar over picked ink
-  ([Draw](#draw)) is for ink.
+  isolation) and Hide, nothing else: the rest stays in the view's menu. Isolate from the bar keeps the pick, so the bar
+  stays. Why: the two things a person does to a part there and then, at the part, rather than in a menu they must know
+  to long-press for or in a panel that covers the model on a phone. As the bar over picked ink ([Draw](#draw)) is for
+  ink.
 - **Measure** is the ruler.
   - On a STEP or .xbf it takes whole things, as its filter allows: a vertex within 10px of an edge's end, else the
     edge, else the face; with nothing ticked, or Shift held, a free point. A hover lights what a press would take. A

@@ -830,7 +830,6 @@ export default {
   "tree.hiddenCount": "{count} 件非表示",
   "tree.undoHide": "元に戻す",
   "selection.actions": "選択の操作",
-  "selection.more": "その他の操作",
   "tree.hiddenParts": "非表示のパーツ",
   "tree.searchResults": "モデルの検索結果",
   "tree.noPartMatch": "「{query}」に一致するパーツはありません",

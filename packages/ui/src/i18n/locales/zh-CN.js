@@ -831,7 +831,6 @@ export default {
   "tree.hiddenCount": "已隐藏 {count} 个",
   "tree.undoHide": "撤销",
   "selection.actions": "所选项操作",
-  "selection.more": "更多操作",
   "tree.hiddenParts": "隐藏的零件",
   "tree.searchResults": "模型搜索结果",
   "tree.noPartMatch": "没有与“{query}”匹配的零件",

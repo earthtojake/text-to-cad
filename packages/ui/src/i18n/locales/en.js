@@ -859,7 +859,6 @@ export default {
   "tree.hiddenCount": "{count} hidden",
   "tree.undoHide": "Undo",
   "selection.actions": "Selection actions",
-  "selection.more": "More actions",
   "tree.hiddenParts": "Hidden parts",
   "tree.searchResults": "Model search results",
   "tree.noPartMatch": "No part matches “{query}”",

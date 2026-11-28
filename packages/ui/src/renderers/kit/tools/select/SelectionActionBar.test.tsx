@@ -1,6 +1,5 @@
 import React from 'react';
 import { act, cleanup, render, screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import SelectionActionBar, { placeBar } from '../../../../../dist/renderers/kit/tools/select/SelectionActionBar.js';
 import VisibilityRow from '../../../../../dist/renderers/kit/tools/select/VisibilityRow.js';
@@ -24,35 +23,30 @@ it('stands just above the pick, else below it, inside the room the chrome leaves
   expect(placeBar(null, size, room)).toBeNull();
 });
 
-// What it offers is the renderer's: its actions, a rule, then More, which opens the view menu's entries for the pick.
-it("offers the renderer's actions, then More with the view's menu", async () => {
+// What it offers is the renderer's actions, and nothing else: the rest is the view's menu.
+it("offers the renderer's actions alone", async () => {
   // Every corner of the box falls on the view's middle (projecting it needs a real camera: mocked below).
   const camera = { updateMatrixWorld() {} };
   const runtime = { camera, renderer: { domElement: document.createElement('canvas') } };
   Object.defineProperty(runtime.renderer.domElement, 'clientWidth', { value: 400 });
   Object.defineProperty(runtime.renderer.domElement, 'clientHeight', { value: 300 });
   vi.spyOn((await import('three')).Vector3.prototype, 'project').mockImplementation(function (this: any) { this.set(0, 0, 0); return this; });
-  const hide = vi.fn(), isolate = vi.fn(), reveal = vi.fn(), opened = vi.fn();
+  const hide = vi.fn(), isolate = vi.fn();
   await act(async () => {
     render(<ViewerHostContext.Provider value={testHost()}>
       <SelectionActionBar runtimeRef={{ current: runtime }} bounds={() => ({ min: [0, 0, 0], max: [1, 1, 1] })} boundsKey="i1"
-        label="Selection actions" moreLabel="More actions" onMenuOpen={opened}
-        actions={[{ id: 'isolate', label: 'Isolate', icon: null, onSelect: isolate }, { id: 'hide', label: 'Hide', icon: null, onSelect: hide }]}
-        menu={() => [{ id: 'visibility', label: 'Reveal', onSelect: reveal }]} />
+        label="Selection actions"
+        actions={[{ id: 'isolate', label: 'Isolate', icon: null, onSelect: isolate }, { id: 'hide', label: 'Hide', icon: null, onSelect: hide }]} />
     </ViewerHostContext.Provider>);
   });
   const bar = await screen.findByRole('toolbar', { name: 'Selection actions' });
   const controls = [...bar.querySelectorAll('button, [role=separator]')]
     .map(element => (element.getAttribute('role') === 'separator' ? '|' : element.getAttribute('aria-label')));
-  expect(controls).toEqual(['Isolate', 'Hide', '|', 'More actions']);
+  expect(controls).toEqual(['Isolate', 'Hide']);
   within(bar).getByRole('button', { name: 'Hide' }).click();
   expect(hide).toHaveBeenCalledTimes(1);
-  const user = userEvent.setup();
-  await user.click(within(bar).getByRole('button', { name: 'More actions' }));
-  const item = await screen.findByRole('menuitem', { name: 'Reveal' });
-  expect(opened).toHaveBeenCalledTimes(1);
-  await user.click(item);
-  expect(reveal).toHaveBeenCalledTimes(1);
+  within(bar).getByRole('button', { name: 'Isolate' }).click();
+  expect(isolate).toHaveBeenCalledTimes(1);
 });
 
 // The row under the strip says what is left out and gives the way back; nothing while nothing is.
