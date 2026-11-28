@@ -829,6 +829,7 @@ export default {
   "tree.modelingTree": "建模樹狀結構",
   "tree.modelTreeArea": "模型樹狀結構區域",
   "tree.hiddenCount": "已隱藏 {count} 個",
+  "tree.undoHide": "復原",
   "selection.actions": "所選項目操作",
   "tree.hiddenParts": "隱藏的零件",
   "tree.searchResults": "模型搜尋結果",

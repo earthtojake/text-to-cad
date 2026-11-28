@@ -2,6 +2,7 @@ import React from 'react';
 import { act, cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import SelectionActionBar, { placeBar } from '../../../../../dist/renderers/kit/tools/select/SelectionActionBar.js';
+import VisibilityRow from '../../../../../dist/renderers/kit/tools/select/VisibilityRow.js';
 import { ViewerHostContext } from '../../../../../dist/host/context.js';
 import { testHost } from '../../../../../dist/host/testing/host.js';
 
@@ -46,4 +47,21 @@ it("offers the renderer's actions alone", async () => {
   expect(hide).toHaveBeenCalledTimes(1);
   within(bar).getByRole('button', { name: 'Isolate' }).click();
   expect(isolate).toHaveBeenCalledTimes(1);
+});
+
+// The row under the strip says what is left out and gives the way back; nothing while nothing is.
+it('says what is hidden with Undo and Show all, and isolation with its exit; nothing while nothing is left out', async () => {
+  const showAll = vi.fn(), undo = vi.fn(), exit = vi.fn();
+  const { rerender } = render(<VisibilityRow hiddenCount={0} onShowAll={showAll} />);
+  expect(document.querySelector('[data-visibility-row]')).toBeNull();
+  rerender(<VisibilityRow hiddenCount={2} onShowAll={showAll} onUndo={undo} isolatedCount={1} onExitIsolate={exit} />);
+  const row = screen.getByRole('toolbar', { name: 'Hidden parts' });
+  expect(row.textContent).toContain('2 hidden');
+  expect([...row.querySelectorAll('button')].map(button => button.textContent)).toEqual(['Undo', 'Show all', 'Exit isolate']);
+  within(row).getByRole('button', { name: 'Undo' }).click();
+  within(row).getByRole('button', { name: 'Show all' }).click();
+  within(row).getByRole('button', { name: 'Exit isolate' }).click();
+  expect([undo, showAll, exit].map(spy => spy.mock.calls.length)).toEqual([1, 1, 1]);
+  rerender(<VisibilityRow hiddenCount={1} onShowAll={showAll} />);
+  expect([...screen.getByRole('toolbar', { name: 'Hidden parts' }).querySelectorAll('button')].map(button => button.textContent)).toEqual(['Show all']);
 });

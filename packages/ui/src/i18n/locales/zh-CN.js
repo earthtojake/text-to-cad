@@ -829,6 +829,7 @@ export default {
   "tree.modelingTree": "建模树",
   "tree.modelTreeArea": "模型树区域",
   "tree.hiddenCount": "已隐藏 {count} 个",
+  "tree.undoHide": "撤销",
   "selection.actions": "所选项操作",
   "tree.hiddenParts": "隐藏的零件",
   "tree.searchResults": "模型搜索结果",

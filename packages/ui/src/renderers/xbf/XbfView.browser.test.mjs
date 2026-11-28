@@ -92,24 +92,26 @@ test('an engine document (a STEP\'s renderer) has its Model tab from the first f
   }
 });
 
-// A part picked in an assembly gets a bar just above it (`SelectionActionBar.jsx`): Isolate and Hide. Hide takes it
-// away and lets it go; Isolate keeps the pick, its button pressed, and a second press leaves isolation.
-test('a part picked in an assembly has a bar over it: Hide takes it away, Isolate keeps it and toggles', async (t) => {
+// A part picked in an assembly gets a bar just above it (`SelectionActionBar.jsx`): Isolate and Hide. Isolate keeps the
+// pick, its button pressed, and a second press leaves isolation; Hide takes the part away. A desktop has no row under
+// the strip for it: its panel says what is hidden.
+const opened = page => page.waitForFunction(() => {
+  try { return window.cadHarness.a.controller?.readState().loading === false; } catch { return false; }
+});
+const barControls = bar => bar.locator('button, [role=separator]').evaluateAll(elements => elements
+  .map(element => (element.getAttribute('role') === 'separator' ? '|' : element.getAttribute('aria-label'))));
+
+test('a part picked in an assembly has a bar over it: Isolate keeps it and toggles, Hide takes it away; a desktop has no row', async (t) => {
   const harness = await serveXbfHarness(t);
   const { page, pane, errors } = await harness.open();
-  await page.waitForFunction(() => {
-    try { return window.cadHarness.a.controller?.readState().loading === false; } catch { return false; }
-  });
+  await opened(page);
   await pane.locator('[data-navbar-panel="left"]').first().waitFor();
   if (await pane.locator('[data-navbar-panel="left"][aria-expanded="false"]').count()) await pane.getByRole('button', { name: 'Show panel', exact: true }).click();
   const bar = pane.getByRole('toolbar', { name: 'Selection actions', exact: true });
-  const rows = () => pane.locator('[aria-label="Modeling tree"] button[aria-label]').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')));
   assert.equal(await bar.count(), 0, 'no bar while nothing is picked');
   await pane.getByRole('button', { name: 'Select plate', exact: true }).click();
   await bar.waitFor();
-  const controls = await bar.locator('button, [role=separator]').evaluateAll(elements => elements
-    .map(element => (element.getAttribute('role') === 'separator' ? '|' : element.getAttribute('aria-label'))));
-  assert.deepEqual(controls, ['Isolate', 'Hide']);
+  assert.deepEqual(await barControls(bar), ['Isolate', 'Hide']);
   // Above the part, inside the view, clear of the strip.
   const [placed, canvas, strip] = await Promise.all([bar.boundingBox(), pane.locator('[data-cad-canvas] canvas').first().boundingBox(),
     pane.locator('[data-cad-toolbar="tools"]').first().boundingBox()]);
@@ -118,10 +120,43 @@ test('a part picked in an assembly has a bar over it: Hide takes it away, Isolat
   await bar.getByRole('button', { name: 'Isolate', exact: true }).click();
   await bar.getByRole('button', { name: 'Exit isolate', exact: true }).click();
   await bar.getByRole('button', { name: 'Isolate', exact: true }).waitFor();
-  assert.equal(await pane.locator('[data-isolate-exit]').count(), 0, 'out of isolation');
+  await bar.getByRole('button', { name: 'Hide', exact: true }).click();
+  await bar.waitFor({ state: 'detached' });
+  assert.ok((await pane.locator('[aria-label="Modeling tree"] button[aria-label]').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))))
+    .includes('Reveal plate'), 'the tree says it is hidden');
+  assert.equal(await pane.locator('[data-visibility-row]').count(), 0, 'no row under the strip on a desktop');
+  assert.deepEqual(errors, []);
+});
+
+// On a phone the panel is a sheet over the model, so Select's row under the strip says what is hidden or isolated and
+// brings it back: "1 hidden" with Undo (the part back, picked again, its bar with it) and Show all; Exit isolate.
+test('on a phone, Select\'s row under the strip says what the bar hid, with Undo, and isolation with its exit', async (t) => {
+  const harness = await serveXbfHarness(t);
+  const { page, pane, errors } = await harness.open({ width: 390 });
+  await opened(page);
+  const toggle = pane.locator('[data-navbar-panel="left"]').first();
+  const bar = pane.getByRole('toolbar', { name: 'Selection actions', exact: true });
+  const row = pane.locator('[data-visibility-row]');
+  // Picked from the sheet, which stays open for more picks; shut, the model and its bar are in sight.
+  await toggle.click();
+  await page.locator('[data-panel-sheet]').getByRole('button', { name: 'Select plate', exact: true }).click();
+  await toggle.click();
+  await page.locator('[data-panel-sheet]').waitFor({ state: 'detached' });
+  await bar.waitFor();
+  assert.equal(await row.count(), 0, 'no row while nothing is hidden');
 
   await bar.getByRole('button', { name: 'Hide', exact: true }).click();
   await bar.waitFor({ state: 'detached' });
-  assert.ok((await rows()).includes('Reveal plate'), 'the tree says it is hidden');
+  await row.waitFor();
+  assert.match(await row.textContent(), /1 hidden/);
+  assert.deepEqual(await row.locator('button').evaluateAll(buttons => buttons.map(button => button.textContent)), ['Undo', 'Show all']);
+  await row.getByRole('button', { name: 'Undo', exact: true }).click();
+  await row.waitFor({ state: 'detached' });
+  await bar.waitFor();
+
+  await bar.getByRole('button', { name: 'Isolate', exact: true }).click();
+  await row.getByRole('button', { name: 'Exit isolate', exact: true }).click();
+  await row.waitFor({ state: 'detached' });
+  await bar.getByRole('button', { name: 'Isolate', exact: true }).waitFor();
   assert.deepEqual(errors, []);
 });
