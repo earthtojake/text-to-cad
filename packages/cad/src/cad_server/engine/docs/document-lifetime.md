@@ -23,10 +23,16 @@ exit 2), whether or not a live worker still holds its build (`Models.held` lets 
 and running its script writes the file again. Nothing says which script: the file is not there to
 read it from. One whose `.xbf` another process wrote since its run (a copy, a checkout, a sync folder) is that
 file from then on, as after a restart: the row keeps the version of the file its run left (`written`,
-`state.file_version`), and `Models.held` lets go of a row whose file is another version, unless a build of it is
-writing the file now (`serve.Server.build_of`); the server asks it before it serves a model from its worker
-(`serve.Server.model_held`), so every verb and page reads the file at once, and a page on it follows as it
-follows any file changed on disk. Running its script builds and holds it again. A rewrite of the same size within
+`state.file_version`), and `Models.held` lets go of a row whose file is another version, unless a request of
+its worker is under way (its lease, taken before the request is sent and let go once its answer gave the row
+the version its run left: the daemon knows it before any of the run's progress reaches it); the server asks it
+before it serves a model from its worker (`serve.Server.model_held`), so every verb and page reads the file at
+once, and a page on it follows as it follows any file changed on disk. Nothing the engine's own runs write lets
+a row go: a run that fails keeps the file it left as its row's (one that wrote its `.xbf` before a declared file
+failed), and only the row judged is let go, never one an answer put in its place meanwhile -- a row let go hears
+no progress or failure of the next run, which the daemon tells the rows of the worker that runs it. A file
+another process writes while a request of its worker is under way is seen once that request ends, and is taken
+as the run's own when the request is a run of its model. Running its script builds and holds it again. A rewrite of the same size within
 one tick of the file system's clock keeps the version, and is not seen.
 
 **Two kinds.** A function in a file is a model: its document is
