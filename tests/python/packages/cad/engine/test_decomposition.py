@@ -258,9 +258,24 @@ class FirstNeedTest(_Folder):
                 ("Darwin", "arm64", None, True), ("Darwin", "x86_64", None, False),
                 ("Windows", "AMD64", None, True), ("Windows", "ARM64", None, False),
                 ("Linux", "x86_64", True, True), ("Linux", "aarch64", True, True),
-                ("Linux", "x86_64", False, False), ("Linux", "armv7l", True, False), ("FreeBSD", "amd64", None, False)]:
+                ("Linux", "x86_64", False, False), ("Linux", "armv7l", True, False), ("FreeBSD", "amd64", None, False),
+                ("Emscripten", "wasm32", None, False)]:
             with self.subTest(system=system, machine=machine, glibc=glibc):
                 self.assertIs(hulls.published(system, machine, glibc), wheel)
+
+    def test_a_kernel_process_of_the_webassembly_kernel_is_refused_in_one_line_and_starts_nothing(self) -> None:
+        # CoACD is native code with no WebAssembly wheel: no process is started for it there, and no engine asked.
+        import importlib.util
+
+        with mock.patch("platform.system", return_value="Emscripten"), \
+                mock.patch("platform.machine", return_value="wasm32"), \
+                mock.patch.object(importlib.util, "find_spec", return_value=None), \
+                mock.patch.object(hulls, "PROVIDE", None), \
+                mock.patch.object(hulls, "_engine", side_effect=AssertionError("an engine was asked")), \
+                mock.patch.object(hulls.subprocess, "Popen", side_effect=AssertionError("a process started")):
+            with self.assertRaisesRegex(hulls.Unavailable, r"^coacd comes with .* and this is Emscripten wasm32$") as said:
+                hulls._python()
+        self.assertNotIn("\n", str(said.exception))
 
     def test_the_engine_is_asked_over_its_door_and_an_engine_without_the_request_is_none(self) -> None:
         told: list[str] = []

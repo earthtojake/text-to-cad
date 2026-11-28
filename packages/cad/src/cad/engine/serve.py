@@ -672,6 +672,24 @@ class _Job:
         self.future: concurrent.futures.Future = concurrent.futures.Future()
 
 
+def _threads() -> bool:
+    from cad.engine import places
+
+    return places.THREADS
+
+
+def _here(fn: Callable, *args: Any) -> concurrent.futures.Future:
+    """``fn(*args)`` run now, in this thread: its future, done. What a mesher's job is on a Python that starts
+    no thread and no process (``places.THREADS``: a kernel process of the WebAssembly kernel serving a document
+    of its own), where a pool and a thread of its own are both beyond it."""
+    future: concurrent.futures.Future = concurrent.futures.Future()
+    try:
+        future.set_result(fn(*args))
+    except BaseException as error:  # noqa: BLE001 - the job's failure is its future's
+        future.set_exception(error)
+    return future
+
+
 class Mesher:
     def __init__(self, mode: str | None = None, workers: int | None = None) -> None:
         self.mode = mode or os.environ.get("CAD_ENGINE_MESH", "processes")
@@ -719,6 +737,8 @@ class Mesher:
     def submit(self, data: bytes, mode: str | None = None) -> concurrent.futures.Future:
         """One part meshed from its ``shape_bytes``: a future of its buffer, its unmeshed
         faces and the seconds it took. On the pool, after every fact waiting (``MESH``)."""
+        if not _threads():
+            return _here(_timed, data, True)
         if (mode or self.mode) == "processes":
             self.processes()
             return self.run(_timed, data, len(data) >= PARALLEL_BYTES, priority=MESH)
@@ -727,6 +747,8 @@ class Mesher:
     def run(self, fn: Callable, *args: Any, priority: int = FACT) -> concurrent.futures.Future:
         """``fn(*args)`` in a pool process, in its queue (``FACT``, ``MESH``): a future of
         what it returns. Cancelled while it waits, it never runs."""
+        if not _threads():
+            return _here(fn, *args)
         job = _Job(fn, args, priority)
         with self._wake:
             if self._stopped:

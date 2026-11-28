@@ -696,10 +696,14 @@ class _Crew:
 
     def run(self, orders: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
         """Each order's answer by its number: ``{"volume"}``, or ``{"unmeasured": words, "reason": code}``."""
+        from cad.engine import places
+
+        answers: dict[int, dict[str, Any]] = {}
+        if not places.THREADS:
+            return self._here(orders, answers)
         waiting: queue.SimpleQueue = queue.SimpleQueue()
         for order in orders:
             waiting.put(order)
-        answers: dict[int, dict[str, Any]] = {}
         threads = [threading.Thread(target=self._work, args=(waiting, answers), name=f"cad-interference-{at}", daemon=True)
                    for at in range(min(self.jobs, len(orders)))]
         self.guard = _Guard()
@@ -711,6 +715,26 @@ class _Crew:
         finally:
             self.guard.close()
             self.guard = None
+        return answers
+
+    def _here(self, orders: list[dict[str, Any]], answers: dict[int, dict[str, Any]]) -> dict[int, dict[str, Any]]:
+        """Each order measured in this process, in the order given: what the crew is on a Python that starts
+        no thread and no process (``places.THREADS``: the WebAssembly kernel's). The check's time is kept
+        between pairs (one past it is not reached); a pair's own limit is not, since nothing here can stop a
+        kernel call: the engine's supervisor holds the whole process to a check's limits from outside."""
+        measure = _measurer(self.folder)
+        for order in orders:
+            if self.deadline is not None and self.deadline - time.monotonic() <= 0:
+                answers[order["n"]] = {"unmeasured": "not reached before the check's time was up", "reason": OVER_TIME}
+                continue
+            began = time.monotonic()
+            answer = measure(order)
+            answers[order["n"]] = ({"volume": float(answer["volume"])} if "volume" in answer
+                                   else {"unmeasured": f"the kernel could not intersect them: {answer.get('error')}",
+                                         "reason": ERROR})
+            answers[order["n"]]["seconds"] = time.monotonic() - began
+            if self.done is not None:
+                self.done(order, answers[order["n"]])
         return answers
 
     def _start(self) -> tuple[Any, queue.SimpleQueue]:
@@ -815,14 +839,23 @@ def _serve() -> None:
     ``{"n", "error"}``); the kernel's own prints go to its standard error. It ends at the end of its
     input, once what it is measuring is done; its caller ends it sooner (``_Crew._end``), and where the
     caller itself is gone, the crew's guard does (``_Guard``)."""
+    out = os.fdopen(os.dup(1), "w", encoding="utf-8")
+    os.dup2(2, 1)
+    measure = _measurer(Path(sys.argv[1]))
+    for line in sys.stdin:
+        out.write(json.dumps(measure(json.loads(line)), separators=(",", ":")) + "\n")
+        out.flush()
+
+
+def _measurer(folder: Path) -> Any:
+    """What measures an order (``{"n", "a", "b", "placed"}``: two parts by their files in ``folder``, the second
+    placed in the first's frame): ``{"n", "volume"}``, or ``{"n", "error"}`` for what the kernel refused. Each
+    part's shape is read once and kept."""
     from OCP.gp import gp_Trsf
 
     from cad.build123d._geometry import _overlap_volume
     from cad.engine import mesh
 
-    folder = Path(sys.argv[1])
-    out = os.fdopen(os.dup(1), "w", encoding="utf-8")
-    os.dup2(2, 1)
     shapes: dict[int, Any] = {}
 
     def part(index: int) -> Any:
@@ -841,8 +874,7 @@ def _serve() -> None:
             return bd.Shape.cast(BRepBuilderAPI_Transform(shape, trsf, True).Shape())  # a mirrored placement: a copy
         return bd.Shape.cast(shape.Moved(TopLoc_Location(trsf)))
 
-    for line in sys.stdin:
-        order = json.loads(line)
+    def measure(order: dict[str, Any]) -> dict[str, Any]:
         try:
             import build123d as bd
 
@@ -850,8 +882,8 @@ def _serve() -> None:
                                            parallel=True))
             if volume != volume or volume in (float("inf"), float("-inf")):
                 raise ValueError("the shared volume is not a finite number")
-            answer = {"n": order["n"], "volume": volume}
+            return {"n": order["n"], "volume": volume}
         except Exception as error:  # noqa: BLE001 - what the kernel refused is the pair's answer: unmeasured
-            answer = {"n": order["n"], "error": f"{type(error).__name__}: {error}"}
-        out.write(json.dumps(answer, separators=(",", ":")) + "\n")
-        out.flush()
+            return {"n": order["n"], "error": f"{type(error).__name__}: {error}"}
+
+    return measure

@@ -389,11 +389,13 @@ def _samples(vertices: np.ndarray, faces: np.ndarray, resolution: float, triangl
     length = edges[index, longest]
     doubled = np.linalg.norm(np.cross(b - a, c - a), axis=1)
     height = np.divide(doubled, length, out=np.zeros_like(length), where=length > 0)
-    rows = np.maximum(1, np.ceil(height / across - 1e-9)).astype(np.int64)  # intervals from AB to C
+    # Counts numpy repeats by are its index type's (``np.intp``: 32 bits on a 32-bit platform, where it takes no
+    # 64-bit array for one).
+    rows = np.maximum(1, np.ceil(height / across - 1e-9)).astype(np.intp)  # intervals from AB to C
     triangle = np.repeat(index, rows + 1)
     row = np.arange(len(triangle)) - np.repeat(np.cumsum(rows + 1) - (rows + 1), rows + 1)
     share = row / rows[triangle]  # 0 on AB, 1 at C
-    spans = np.maximum(1, np.ceil(length[triangle] * (1 - share) / along - 1e-9)).astype(np.int64)
+    spans = np.maximum(1, np.ceil(length[triangle] * (1 - share) / along - 1e-9)).astype(np.intp)
     spans[row == rows[triangle]] = 0  # the apex: one point
     point_row = np.repeat(np.arange(len(triangle)), spans + 1)
     on_row = (np.arange(len(point_row)) - np.repeat(np.cumsum(spans + 1) - (spans + 1), spans + 1)) \
@@ -463,7 +465,7 @@ class _Rays:
             first = np.floor((flat_low - self.low[:2]) / size).astype(np.int64)
             last = np.floor((flat_high - self.low[:2]) / size).astype(np.int64)
             spans = last - first + 1
-            counts = spans[:, 0] * spans[:, 1]
+            counts = (spans[:, 0] * spans[:, 1]).astype(np.intp)  # repeated by, below
             if int(counts.sum()) <= _FILED:
                 break
             size *= 2.0

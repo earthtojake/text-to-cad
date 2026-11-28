@@ -612,8 +612,12 @@ def _watched(request: dict[str, Any]) -> dict[str, Any]:
     (``process_lost``) or whose measuring itself failed there (``error``: what was raised, in one line) -- the
     engine's reasons for the same. An integration this environment lacks is raised here as there
     (``ModuleNotFoundError``, by the module's name). Where there is no interpreter to start
-    (``sys.executable`` empty: an embedded one) the check is measured in this process, unwatched."""
-    if not sys.executable:
+    (``sys.executable`` empty: an embedded one) or this Python starts no process (``places.THREADS``: the
+    WebAssembly kernel's, whose every process the engine's supervisor holds to its limits) the check is
+    measured in this process, unwatched."""
+    from cad.engine import places
+
+    if not sys.executable or not places.THREADS:
         return _measured_here(request)
     import site
     import subprocess

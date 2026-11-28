@@ -197,6 +197,37 @@ class ThreadlessWorkerTest(unittest.TestCase):
         self.assertEqual(self.worker.wait(60), 0)
 
 
+class ThreadlessJobsTest(unittest.TestCase):
+    """What starts a thread or a process inside a build or a check, on a Python that starts neither: done in the
+    one thread, at once."""
+
+    def test_a_mesher_s_job_runs_where_it_is_asked_and_starts_no_thread_and_no_pool(self) -> None:
+        from cad.engine import places
+
+        with mock.patch.object(places, "THREADS", False), \
+                mock.patch.object(serve, "_process_pool", side_effect=AssertionError("a pool started")), \
+                mock.patch.object(serve, "_timed", side_effect=lambda data, parallel: (data[::-1], parallel)):
+            mesher = serve.Mesher("processes")
+            self.assertEqual(mesher.submit(b"abc").result(0), (b"cba", True))
+            self.assertEqual(mesher.run(_echo, 7).result(0), 7)
+            failed = mesher.run(_fails, "no such part")
+            self.assertIsInstance(failed.exception(0), ValueError)
+            self.assertIsNone(mesher._dispatcher)
+            self.assertEqual(mesher._inline._threads, set(), "the inline thread was never started")
+
+    def test_a_check_a_caller_measures_itself_is_measured_in_its_own_process(self) -> None:
+        import subprocess
+
+        from cad._internal import manufacturing
+        from cad.engine import places
+
+        request = {"type": "step", "source": "part.step"}
+        with mock.patch.object(places, "THREADS", False), \
+                mock.patch.object(subprocess, "Popen", side_effect=AssertionError("a process started")), \
+                mock.patch.object(manufacturing, "_measured_here", side_effect=lambda asked: {"measured": asked}):
+            self.assertEqual(manufacturing._watched(request), {"measured": request})
+
+
 class ThreadlessProgressTest(unittest.TestCase):
     def test_no_frame_is_held_where_no_thread_could_send_it_when_its_interval_is_up(self) -> None:
         # A build that says a body's name and then spends a minute in it: the page shows that name, not the one before.

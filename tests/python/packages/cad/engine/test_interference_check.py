@@ -143,6 +143,24 @@ class MeasureTest(unittest.TestCase):
         self.assertAlmostEqual(shared["volume_mm3"], 4 ** 3, places=6)
         self.assertEqual(found["unmeasured"], [])
 
+    def test_a_python_that_starts_no_process_measures_each_pair_itself_to_the_same_answer(self) -> None:
+        from unittest import mock
+
+        from cad.engine import places
+
+        apart = self.measure()
+        with mock.patch.object(places, "THREADS", False), \
+                mock.patch.object(_interference._Crew, "_start", side_effect=AssertionError("a process started")), \
+                mock.patch.object(_interference, "_Guard", side_effect=AssertionError("a guard started")):
+            here = self.measure()
+            late = _interference.measure(self.structure, self.shapes, {**asked.options(), "jobs": 2, "seconds": 1e-9})
+        self.assertEqual((here["pairs"], here["unmeasured"], here["fits"]), (apart["pairs"], [], apart["fits"]))
+        self.assertEqual({names: row["volume_mm3"] for names, row in self.pairs(here["overlaps"]).items()},
+                         {names: row["volume_mm3"] for names, row in self.pairs(apart["overlaps"]).items()})
+        # The check's time is kept between pairs, here as by the crew.
+        self.assertEqual({(row["reason"], row["message"]) for row in late["unmeasured"]},
+                         {("over_time", "not reached before the check's time was up")})
+
     def test_a_measurement_is_kept_by_its_two_geometries_so_an_edit_measures_its_own_pairs_alone(self) -> None:
         kept = self.folder / "kept"
         options = {**asked.options(), "jobs": 2}
