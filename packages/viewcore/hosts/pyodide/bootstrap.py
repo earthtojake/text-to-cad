@@ -94,6 +94,147 @@ def _files(host, real) -> None:
     os.stat, os.lstat, os.fstat, os.umask, os.chdir = stat_exact, lstat_exact, fstat_exact, umask, chdir_real
 
 
+def _sockets(net) -> None:
+    """Sockets a program opens to somewhere: the host's (python.mjs), since the platform's own reach nothing
+    under Node. ``socket.socket`` is a stream socket that connects -- to a host and port, or to a path
+    (``AF_UNIX``) -- sends, receives within its time limit and closes; ``makefile`` is the standard library's
+    own over it. What listens, and datagrams, the platform does not have: ``OSError``, said so."""
+    import errno
+    import socket
+
+    from pyodide.ffi import to_js
+
+    codes = {"ECONNREFUSED": ConnectionRefusedError, "ENOENT": FileNotFoundError, "ECONNRESET": ConnectionResetError,
+             "EPIPE": BrokenPipeError, "EACCES": PermissionError, "EPERM": PermissionError, "ETIMEDOUT": TimeoutError}
+
+    def raised(found):
+        status, said = int(found[0]), found[1].to_bytes().decode("utf-8", "replace")
+        if status == -2:
+            raise TimeoutError("timed out")
+        kind = codes.get(said, OSError)
+        raise kind(getattr(errno, said, errno.EIO), said if kind is OSError else os.strerror(getattr(errno, said, errno.EIO)))
+
+    class HostSocket:
+        def __init__(self, family=-1, type=-1, proto=-1, fileno=None):
+            self.family = socket.AF_INET if family == -1 else family
+            self.type = socket.SOCK_STREAM if type == -1 else type
+            self.proto = 0 if proto == -1 else proto
+            self._id, self._timeout, self._closed, self._io_refs, self._peer = None, socket.getdefaulttimeout(), False, 0, None
+            if fileno is not None or self.type != socket.SOCK_STREAM:
+                raise OSError(errno.ENOTSUP, "this Python (WebAssembly) opens stream sockets that connect, and no other")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_error):
+            if not self._closed:
+                self.close()
+
+        def _open(self):
+            if self._id is None:
+                raise OSError(errno.ENOTCONN, os.strerror(errno.ENOTCONN))
+            return self._id
+
+        def settimeout(self, seconds):
+            self._timeout = seconds
+
+        def gettimeout(self):
+            return self._timeout
+
+        def setblocking(self, flag):
+            self._timeout = None if flag else 0.0
+
+        def getblocking(self):
+            return self._timeout != 0.0
+
+        def setsockopt(self, *_given):
+            pass
+
+        def getsockopt(self, *_given):
+            return 0
+
+        def fileno(self):
+            return -1
+
+        def getpeername(self):
+            return self._peer
+
+        def getsockname(self):
+            return ("0.0.0.0", 0) if self.family != getattr(socket, "AF_UNIX", None) else ""
+
+        def connect(self, address):
+            if self.family == getattr(socket, "AF_UNIX", None):
+                found = net["connect"](None, None, os.fsdecode(address), self._timeout)
+            else:
+                found = net["connect"](str(address[0]), int(address[1]), None, self._timeout)
+            if int(found[0]) < 0:
+                raised(found)
+            self._id, self._peer = int(found[0]), address
+
+        def connect_ex(self, address):
+            try:
+                self.connect(address)
+            except OSError as error:
+                return error.errno or errno.EIO
+            return 0
+
+        def send(self, data, flags=0):
+            found = net["send"](self._open(), to_js(bytes(data)))
+            if int(found[0]) < 0:
+                raised(found)
+            return int(found[0])
+
+        def sendall(self, data, flags=0):
+            self.send(data)
+
+        def recv(self, size, flags=0):
+            found = net["receive"](self._open(), int(size), self._timeout)
+            if int(found[0]) < 0:
+                raised(found)
+            return found[1].to_bytes()
+
+        def recv_into(self, buffer, nbytes=0, flags=0):
+            view = memoryview(buffer).cast("B")
+            got = self.recv(min(len(view), nbytes or len(view)))
+            view[:len(got)] = got
+            return len(got)
+
+        def shutdown(self, how):
+            pass
+
+        def _decref_socketios(self):
+            if self._io_refs > 0:
+                self._io_refs -= 1
+            if self._closed:
+                self.close()
+
+        def close(self):
+            self._closed = True
+            if self._io_refs <= 0 and self._id is not None:
+                held, self._id = self._id, None
+                net["close"](held)
+
+        def detach(self):
+            raise OSError(errno.ENOTSUP, "this Python's sockets are its host's: none is a descriptor")
+
+        def bind(self, address):
+            raise OSError(errno.ENOTSUP, "this Python (WebAssembly) listens on nothing: a socket here connects")
+
+        listen = accept = bind
+        makefile = socket.socket.makefile
+
+    def create_connection(address, timeout=socket._GLOBAL_DEFAULT_TIMEOUT, source_address=None, *, all_errors=False):
+        made = HostSocket(socket.AF_INET, socket.SOCK_STREAM)
+        if timeout is not socket._GLOBAL_DEFAULT_TIMEOUT:
+            made.settimeout(timeout)
+        made.connect(address)  # the host resolves a name itself
+        return made
+
+    if not hasattr(socket, "AF_UNIX"):
+        socket.AF_UNIX = 1  # the platform names no path sockets; the host connects to one
+    socket.socket, socket.create_connection = HostSocket, create_connection
+
+
 # --- imports a program may never use ------------------------------------------------------------------------------
 #
 # Some packages cost seconds to import here (each of their extension modules is a library the platform links at
@@ -278,9 +419,10 @@ def _site(host) -> None:
                 raise
 
 
-def main(host, real) -> int:
+def main(host, real, net) -> int:
     host = host.to_py() if hasattr(host, "to_py") else host
     real = real.to_py(depth=1) if hasattr(real, "to_py") else real
+    _sockets(net.to_py(depth=1) if hasattr(net, "to_py") else net)
     _process(host)
     if host["mounted"]:
         os.chdir(host["cwd"])

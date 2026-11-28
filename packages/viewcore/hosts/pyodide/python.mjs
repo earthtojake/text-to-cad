@@ -12,14 +12,18 @@
 //   - `sys.path` as CPython makes it: the script's folder (unless -P), PYTHONPATH (unless -E or -I), then the
 //     kernel folder's site-packages, its `.pth` files read and `sitecustomize` imported (unless -S).
 //
-// What it cannot be: a Python with threads, child processes or sockets. A program that starts one fails there, as
-// on any Pyodide.
+//   - sockets a program opens to a port or a path of this computer or another (the engine's own client is one):
+//     the host's, since the platform has none here. Nothing listens.
+//
+// What it cannot be: a Python with threads or child processes. A program that starts one fails there, as on any
+// Pyodide.
 //
 // The kernel folder is named by CAD_KERNEL_HOME, or is the folder two above this file's launcher (make.mjs writes
 // `KERNEL/bin/python`, which sets it).
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { Worker } from "node:worker_threads";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // Node 22's V8 keeps a copy of the kernel's function table per loaded library: 4.3 GB for this kernel, against
@@ -202,6 +206,77 @@ pyodide.globals.set("_host", pyodide.toPy({
     .filter((name) => name.endsWith(".libs")),
   deferred: made.deferred ?? [],
 }));
+// Sockets. The platform has none a program can use under Node, and the engine's own client is one: a program run
+// here asks the engine's door for its builds. A thread of the host's does the asynchronous I/O (Node's `net`) and
+// the program's thread, which cannot yield, waits on shared memory for each answer: connect, send, receive (with
+// its time limit), close. Client stream sockets alone, to a port or a path; nothing listens here.
+const NET = `
+const { parentPort, workerData } = require("node:worker_threads");
+const net = require("node:net");
+const state = new Int32Array(workerData.state), data = new Uint8Array(workerData.data);
+const held = new Map();
+let last = 0;
+function answer(status, bytes) {
+  const length = bytes ? Math.min(bytes.length, data.length) : 0;
+  if (length) data.set(bytes.subarray(0, length));
+  Atomics.store(state, 1, status); Atomics.store(state, 2, length); Atomics.store(state, 0, 1); Atomics.notify(state, 0);
+}
+const failed = (error) => answer(-1, Buffer.from(String(error && (error.code || error.message) || "EIO")));
+function give(one) {
+  const asked = one.asked;
+  if (!asked) return;
+  if (one.chunks.length) {
+    let chunk = one.chunks[0];
+    if (chunk.length > asked.most) { one.chunks[0] = chunk.subarray(asked.most); chunk = chunk.subarray(0, asked.most); } else one.chunks.shift();
+    clearTimeout(asked.timer); one.asked = null; answer(0, chunk);
+  } else if (one.error) { clearTimeout(asked.timer); one.asked = null; failed(one.error);
+  } else if (one.ended) { clearTimeout(asked.timer); one.asked = null; answer(0, null); }
+}
+parentPort.on("message", (said) => {
+  const one = held.get(said.id);
+  if (said.op === "connect") {
+    const id = ++last, socket = net.connect(said.path ? { path: said.path } : { host: said.host, port: said.port });
+    const made = { socket, chunks: [], ended: false, error: null, asked: null, open: false };
+    const timer = said.seconds === null ? null : setTimeout(() => { if (!made.open) { socket.destroy(); held.delete(id); answer(-2, null); } }, said.seconds * 1000);
+    socket.on("data", (chunk) => { made.chunks.push(chunk); give(made); });
+    socket.on("end", () => { made.ended = true; give(made); });
+    socket.on("close", () => { made.ended = true; give(made); });
+    socket.on("error", (error) => {
+      if (!made.open) { clearTimeout(timer); if (held.delete(id) || true) failed(error); return; }
+      made.error = error; give(made);
+    });
+    socket.once("connect", () => { clearTimeout(timer); made.open = true; held.set(id, made); answer(id, null); });
+  } else if (!one) { answer(-1, Buffer.from("EBADF"));
+  } else if (said.op === "send") {
+    one.socket.write(said.bytes, (error) => (error ? failed(error) : answer(said.bytes.length, null)));
+  } else if (said.op === "receive") {
+    one.asked = { most: Math.min(said.most, data.length),
+                  timer: said.seconds === null ? null : setTimeout(() => { one.asked = null; answer(-2, null); }, said.seconds * 1000) };
+    give(one);
+  } else if (said.op === "close") { one.socket.destroy(); held.delete(said.id); answer(0, null); }
+});
+`;
+let network = null;
+function net(said) {
+  if (network === null) {
+    const state = new SharedArrayBuffer(12), data = new SharedArrayBuffer(1 << 20);
+    const worker = new Worker(NET, { eval: true, workerData: { state, data } });
+    worker.unref();
+    network = { worker, state: new Int32Array(state), data: new Uint8Array(data) };
+  }
+  Atomics.store(network.state, 0, 0);
+  network.worker.postMessage(said);
+  Atomics.wait(network.state, 0, 0);
+  const status = Atomics.load(network.state, 1), length = Atomics.load(network.state, 2);
+  return [status, Uint8Array.from(network.data.subarray(0, length))];
+}
+pyodide.globals.set("_host_net", pyodide.toPy({
+  connect: (host, port, file, seconds) => net({ op: "connect", host, port, path: file, seconds: seconds ?? null }),
+  send: (id, bytes) => net({ op: "send", id, bytes: Uint8Array.from(bytes) }),
+  receive: (id, most, seconds) => net({ op: "receive", id, most, seconds: seconds ?? null }),
+  close: (id) => net({ op: "close", id }),
+}, { depth: 1 }));
+
 pyodide.globals.set("_host_files", pyodide.toPy({ stat: realStat, open_stat: openStat, open_path: openPath,
   umask: (mask) => process.umask(mask),
   // The folder the process itself stands in, which the system sees (a folder a process stands in is held).
@@ -212,7 +287,7 @@ const dynload = pyodide.runPython("import sysconfig; sysconfig.get_path('stdlib'
 pyodide.FS.writeFile(`${dynload}/_cad_bootstrap.py`, fs.readFileSync(path.join(HERE, "bootstrap.py"), "utf8"));
 let code = 0;
 try {
-  code = pyodide.runPython("import _cad_bootstrap; _cad_bootstrap.main(_host, _host_files)");
+  code = pyodide.runPython("import _cad_bootstrap; _cad_bootstrap.main(_host, _host_files, _host_net)");
 } catch (error) {
   fs.writeSync(2, `${String(error?.message ?? error)}\n`);
   code = 1;
