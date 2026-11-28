@@ -97,6 +97,10 @@ chrome that floats over the picture. The home is the navbar over the library: it
   click shows it in this view, and ⌘ or Ctrl and a click, a middle click or the link's own menu open it in a new tab. It
   truncates as the row narrows down to 80px; under that, and always on a phone, it is a control-sized folder tile named
   by the project (its name in a hint), so the way to the project is never lost, and the file's name keeps its width.
+- **The file's name gives way next**: where the row is still short, it truncates, down to nothing on the narrowest
+  phone, never its ⋯ or a control at the right (a put-away alert's icon, Display, Preview, the update button), which
+  keep their room at every width from 320px. Why: the name is in the page's title too, and a control that cannot be
+  pressed is lost.
 - **Right**, from the inside out: a put-away alert's icon (red for an error, amber for a warning; a file's first,
   then a failed update's), Display, Preview, the host's actions (the CAD app's Full size), then, outermost, the update
   button. Over the home: a failed update's put-away icon, then the update button, after the home's own controls (the

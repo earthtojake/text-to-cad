@@ -39,9 +39,10 @@ it("puts the project's name and a slash before the document's, muted, a button w
   const button = within(crumb as HTMLElement).getByRole('button', { name: 'heart-tag' });
   expect([button.tagName, button.textContent, button.className.includes('text-muted-foreground'), within(crumb as HTMLElement).queryByRole('link')])
     .toEqual(['BUTTON', 'heart-tag', true, null]);
-  // Before the name, in the row's order; the name keeps its width, the project's name shrinks.
+  // Before the name, in the row's order; the project's name gives way first, then the name (as drawn: the browser
+  // spec of FileViewer, "a long name gives way").
   expect(crumb.compareDocumentPosition(name()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect([crumb.className.includes('min-w-0'), name().className.includes('shrink-0'), name().className.includes('max-w-[65%]')]).toEqual([true, true, true]);
+  expect([crumb.className.includes('shrink-[1000]'), name().className.includes('shrink-0'), name().className.includes('max-w-[65%]')]).toEqual([true, false, true]);
   fireEvent.click(button);
   expect(onOpen).toHaveBeenCalledTimes(1);
   view.unmount();
