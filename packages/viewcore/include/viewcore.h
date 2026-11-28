@@ -117,9 +117,10 @@ uint8_t *vc_glb(int32_t doc, uint32_t *out_len);
  *    "camera": {"projection" ("orthographic" | "perspective"), "eye", "target", "up", "height" | "fov"},
  *    "light": {"lights": [{"direction", "intensity"}...], "environment": {"payload", "width", "height", "intensity"}}
  *      or "phong": {"ambient", "specular", "shininess", "lights"},
- *    "clip": [a, b, c, d], "payloads": [length...], "meshes": [payload...],
+ *    "clip": [a, b, c, d], "payloads": [length...], "meshes": [payload...], "matrices": payload,
  *    "draw": [{"faces": mesh, "ranges", "matrix", "shading", "color", "alpha", "metallic", "roughness", "ior",
  *              "emission", "offset", "layer"} | {"edges": mesh, "classes", "matrix", "color", "width", "layer"} |
+ *             {"lines": {"positions", "counts"}, "matrix", "color", "width", "clip", "layer"} |
  *             {"cap": mesh, "matrix", "color"} | {"triangles": {"positions", "texels", "indices"}, "texture",
  *              "color", "blend", "offset", "clip", "layer"}...]}
  * A mesh is a part's XBM2 buffer (vc_mesh); colours are linear. The result is width x height RGBA bytes, sRGB, the

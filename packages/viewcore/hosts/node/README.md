@@ -141,6 +141,8 @@ A draw is one of:
   polygon offset `[factor, units]`.
 - `{edges: mesh, classes, matrix, color, width, layer}`: the mesh's polylines of the classes named (the XBM2 edge
   table's codes), `width` pixels wide.
+- `{lines: {positions, counts}, matrix?, color, width, clip, layer}`: polylines of the scene's own (a drawing's
+  pens): their points end to end (float32 triples) and each one's count of them (uint32).
 - `{cap: mesh, matrix, color}`: the instance's cut by `clip`, flat and unlit.
 - `{triangles: {positions, texels?, indices}, texture?: {payload, width, height}, color, blend, offset, clip,
   layer}`: triangles Python computed (the grid's bands, an annotation's ribbons and text), unlit, in `color`

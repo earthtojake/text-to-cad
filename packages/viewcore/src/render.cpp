@@ -805,6 +805,15 @@ struct Renderer {
         for (const Value& code : list->items) classes |= 1u << ((unsigned)code.number() & 31u);
       else classes = ~0u;
       place_edges(item, classes);
+    } else if ((named = entry.get("lines"))) {
+      item.kind = EDGES;
+      numbers(entry.get("color"), four, 3, "color");
+      for (int c = 0; c < 3; ++c) item.color[c] = (float)four[c];
+      item.flat = flat_of(item.color);
+      item.width = (float)number(entry.get("width"), 1);
+      const Value* cut = entry.get("clip");
+      item.cut = !(cut && cut->kind == Value::BOOL && !cut->flag);
+      place_triangles(item, *named);
     } else if ((named = entry.get("cap"))) {
       item.kind = CAP;
       item.mesh = mesh_of(named);
@@ -839,7 +848,7 @@ struct Renderer {
       }
       place_triangles(item, *named);
     } else {
-      throw std::invalid_argument("the scene draws something that is no faces, edges, cap or triangles");
+      throw std::invalid_argument("the scene draws something that is no faces, edges, lines, cap or triangles");
     }
     items.push_back(item);
   }
@@ -1148,7 +1157,7 @@ struct Renderer {
     size_t most = 0;
     for (const Pending& wait : pending) {
       const Item& item = items[wait.item];
-      if (item.kind != TRIANGLES) most += item.kind == EDGES ? meshes[item.mesh].npoints : meshes[item.mesh].nodes;
+      if (item.kind != TRIANGLES && item.mesh >= 0) most += item.kind == EDGES ? meshes[item.mesh].npoints : meshes[item.mesh].nodes;
     }
     points.reserve(most), attributes.reserve(most * 3), cuts.reserve(most), outside.reserve(most);
     for (const Pending& wait : pending) {
@@ -1184,6 +1193,27 @@ struct Renderer {
           run(0, mesh.nindices);
         }
         item.count = (uint32_t)triangles.size() - item.first;
+      } else if (item.kind == EDGES && wait.source) {
+        // Polylines of the scene's own: their points end to end, and each one's count.
+        Span positions = payload(wait.source->get("positions"), "positions");
+        Span counts = payload(wait.source->get("counts"), "counts");
+        const uint32_t total = (uint32_t)(positions.size / 12);
+        const uint32_t base = (uint32_t)points.size();
+        const float none[3] = {0, 0, 0};
+        for (uint32_t at = 0; at < total; ++at) {
+          double p[3] = {load<float>(positions.data + (size_t)at * 12), load<float>(positions.data + (size_t)at * 12 + 4),
+                         load<float>(positions.data + (size_t)at * 12 + 8)}, w[3];
+          transform(item.matrix, p, w);
+          add_point(w, none);
+        }
+        uint32_t first = 0;
+        for (size_t at = 0; at + 4 <= counts.size; at += 4) {
+          const uint32_t count = load<uint32_t>(counts.data + at);
+          if ((uint64_t)first + count > total) throw std::invalid_argument("a line leaves the scene's points");
+          for (uint32_t k = first; k + 1 < first + count; ++k) add_segment(item, positions.data, base, k);
+          first += count;
+        }
+        item.count = (uint32_t)(segments.size() / 2) - item.first;
       } else if (item.kind == EDGES) {
         const Mesh& mesh = meshes[item.mesh];
         uint32_t base = place(item.mesh, item.matrix, true);
@@ -1193,7 +1223,7 @@ struct Renderer {
           uint32_t kind = load<uint32_t>(mesh.edges + (size_t)edge * 16 + 12);
           if (count < 2 || !(wait.classes >> (kind & 31u) & 1u)) continue;
           if ((uint64_t)first + count > mesh.npoints) throw std::invalid_argument("an edge leaves its mesh");
-          for (uint32_t at = first; at + 1 < first + count; ++at) add_segment(item, mesh, base, at);
+          for (uint32_t at = first; at + 1 < first + count; ++at) add_segment(item, mesh.edge_points, base, at);
         }
         item.count = (uint32_t)(segments.size() / 2) - item.first;
       } else {
@@ -1233,7 +1263,8 @@ struct Renderer {
     }
   }
 
-  void add_segment(const Item& item, const Mesh& mesh, uint32_t base, uint32_t at) {
+  // The segment from point `at` of `count` float triples at `from` to the next, placed at `base`.
+  void add_segment(const Item& item, const uint8_t* from, uint32_t base, uint32_t at) {
     uint32_t a = base + at, b = a + 1;
     if (!(outside[a] | outside[b])) {
       segments.push_back(a), segments.push_back(b);
@@ -1241,9 +1272,8 @@ struct Renderer {
     }
     Corner ends[2];
     for (int k = 0; k < 2; ++k) {
-      double p[3] = {load<float>(mesh.edge_points + (size_t)(at + k) * 12),
-                     load<float>(mesh.edge_points + (size_t)(at + k) * 12 + 4),
-                     load<float>(mesh.edge_points + (size_t)(at + k) * 12 + 8)}, w[3];
+      double p[3] = {load<float>(from + (size_t)(at + k) * 12), load<float>(from + (size_t)(at + k) * 12 + 4),
+                     load<float>(from + (size_t)(at + k) * 12 + 8)}, w[3];
       transform(item.matrix, p, w);
       view_of(w, ends[k].v);
       ends[k].attribute[0] = ends[k].attribute[1] = ends[k].attribute[2] = 0;
