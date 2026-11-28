@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from cad._internal.atomic_replace import replace_atomic
+from cad._internal.refused import ArgumentRefused
 from cad._internal.fea.checks import as_check_finding, finding, quoted
 from cad.results import CheckFinding, FeaFace, FeaPair, FeaPart, FeaResult
 
@@ -633,7 +634,15 @@ def solve_study(target: Path, out: Path, *, study, deck: bool = False, verbose: 
 def _solve_study(document: Path, folder: Path, study, deck: bool, verbose: bool, label: Path | None) -> FeaResult:
     from cad._internal.fea.study import parse_study
 
-    parsed = parse_study(study)  # stdlib, before any heavy import
+    try:
+        parsed = parse_study(study)  # stdlib, before any heavy import
+    except (ValueError, FileNotFoundError) as error:
+        # A study that fails its own validation, or a study file that is not there, is the caller's mistake in what it
+        # gave, as an option out of range is, never the solver's failure (the command's exit 2, ``invalid_argument``);
+        # a solve's own failures are raised past this line, and say what they are.
+        if isinstance(error, ArgumentRefused):
+            raise
+        raise ArgumentRefused(str(error)) from None
     logger = Narration(verbose=verbose)
     progress = progress_log(logger)
     if folder.exists() and not folder.is_dir():
