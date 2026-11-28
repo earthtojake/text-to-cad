@@ -323,9 +323,10 @@ class EngineApp:
         """A launch of the one page (``cad viewer``, a text-only host's link, the dev client's
         ``--api-only``): each file it names (``files``: on-disk CAD files, a relative one read from its
         folder, ``start``, or ids the engine holds) is registered and given its page, ``/<id>``, and each
-        folder it names is opened as a project (``projects``: ``{id, name, root, made}``, ``projects.py``). ``url`` is the
-        first file's page, else the home's (``home``), each with the link (``link``), which ``token`` is too --
-        the user's token itself only for the dev client's ``--api-only``, whose proxy outlives a link."""
+        folder it names is opened as a project (``projects``: ``{id, name, root, made, url}``, ``projects.py``), its ``url`` the
+        home at that project. The launch's ``url`` is the first file's page, else the first project's, else the home's
+        (``home``), each with the link (``link``), which ``token`` is too -- the user's token itself only for the dev
+        client's ``--api-only``, whose proxy outlives a link."""
         from .main import Unopened, resolve_dist_dir
         start = os.path.abspath(options.get('start') or os.path.expanduser('~'))
         dist = '' if options.get('api_only') else resolve_dist_dir(options.get('dist') or '')
@@ -353,8 +354,12 @@ class EngineApp:
         link = self.link()
         for document in documents:
             document['url'] = f'{self.server.url}/{document["id"]}?token={link}'
+        for project in projects:
+            # The page's own address for a project (``apps/web``'s ``fileParam.js``): the home at the project.
+            project['url'] = f'{self.server.url}/?' + urlencode([('project', project['id']), ('token', link)])
         home = f'{self.server.url}/?token={link}'
-        return {'ok': True, 'url': documents[0]['url'] if documents else home, 'home': home,
+        pages = [*documents, *projects]
+        return {'ok': True, 'url': pages[0]['url'] if pages else home, 'home': home,
                 'apiUrl': self.server.url, 'token': self.token if options.get('api_only') else link,
                 'port': self.server.port, 'pid': os.getpid(),
                 'start': app.start, 'documents': documents, 'projects': projects, 'action': 'reused' if reused else 'started'}

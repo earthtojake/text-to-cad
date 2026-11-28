@@ -136,10 +136,10 @@ def main(argv=None, *, prog=DEFAULT_PROG):
     if options['json']:
         print(json.dumps(answer), flush=True)
     else:
-        # The page of each file named, a line each; the home's, where a folder was opened as a project or
+        # The page of each file named, then of each folder opened as a project, a line each; the home's where
         # nothing was named.
-        pages = [document['url'] for document in answer.get('documents') or []]
-        for url in pages + ([answer.get('home') or answer['url']] if answer.get('projects') or not pages else []):
+        pages = [named['url'] for named in [*(answer.get('documents') or []), *(answer.get('projects') or [])]]
+        for url in pages or [answer.get('home') or answer['url']]:
             print(url, flush=True)
     if not options['json'] and not options['no_open'] and not options['api_only']:
         from .browser_open import CannotOpen, open_page

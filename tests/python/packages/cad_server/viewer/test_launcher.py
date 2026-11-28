@@ -129,8 +129,22 @@ class LauncherTest(unittest.TestCase):
         (work / 'STL' / 'tag.stl').write_bytes(b'solid t\nendsolid t\n')
         launched = self.launch('work')
         [project] = launched['projects']
-        self.assertEqual((project['name'], project['made'], launched['url'], launched['documents']),
-                         ('work', True, launched['home'], []))
+        # Its page is the home at the project (`?project=<id>`, which the client reads), not the home itself, and the
+        # link signs it as it signs any page.
+        page = f"{launched['apiUrl']}/?project={project['id']}&token={launched['token']}"
+        self.assertEqual((project['name'], project['made'], launched['url'], project['url'], launched['documents']),
+                         ('work', True, page, page, []))
+        self.assertNotEqual(launched['url'], launched['home'])
+        status, _, body = self.get(launched, page[len(launched['apiUrl']):], token=False)
+        self.assertEqual((status, body), (200, b'<html>viewer</html>'))
+        # Without --json, the same page is the line printed, after each file's.
+        done = subprocess.run([sys.executable, '-m', 'cad_server.viewer', '--no-open', '--dist', str(self.dist),
+                               'work', 'work/STL/tag.stl'], env=self.env, cwd=self.root, capture_output=True, text=True,
+                              timeout=60)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        [file_page, project_page] = done.stdout.splitlines()
+        self.assertRegex(file_page, r'^http://127\.0\.0\.1:\d+/[0-9a-f-]{36}\?token=')
+        self.assertEqual(project_page, page)
         status, _, body = self.get(launched, '/api/v1/projects')
         [listed] = json.loads(body)['projects']
         self.assertEqual((status, listed['id'], listed['name']), (200, project['id'], 'work'))

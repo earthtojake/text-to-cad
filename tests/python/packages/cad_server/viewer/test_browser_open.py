@@ -105,6 +105,19 @@ class BrowserOpenTest(unittest.TestCase):
         self.assertTrue(given[0].startswith('file:'), given[0])
         self.assertNotIn('secret-token', given[0])
 
+    def test_a_folder_opens_and_prints_the_projects_page_not_the_home(self):
+        project = 'http://127.0.0.1:4321/?project=abc&token=secret-token'
+        answer = {'url': project, 'home': 'http://127.0.0.1:4321/?token=secret-token', 'documents': [],
+                  'projects': [{'id': 'abc', 'url': project}]}
+        opened, printed = [], []
+        with mock.patch('cad.engine.client.connect'), mock.patch('cad.engine.client.request', return_value=answer), \
+                mock.patch.object(viewer_main, 'resolve_dist_dir', return_value='/dist'), \
+                mock.patch.object(viewer_main, '_files_opened'), \
+                mock.patch.object(browser_open, 'open_page', side_effect=lambda url, opener: opened.append(url)), \
+                mock.patch('builtins.print', side_effect=lambda *words, **_: printed.append(words[0])):
+            self.assertEqual(viewer_main.main(['somewhere']), 0)
+        self.assertEqual((opened, printed), ([project], [project]))
+
 
 if __name__ == '__main__':
     unittest.main()
